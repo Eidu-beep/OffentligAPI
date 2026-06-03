@@ -2,6 +2,7 @@
   "name": "eiendomsapi",
   "version": "1.0.0",
   "description": "Norsk eiendomsdata API — Kartverket, NGU, NVE",
+  "type": "module",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
