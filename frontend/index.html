@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Eiendomsdata</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0e0f11; --surface: #16181c; --surface2: #1e2128;
+    --border: #2a2d35; --text: #e8e9ec; --muted: #6b7080;
+    --accent: #c8f060; --accent2: #60d4f0; --accent3: #f0a060;
+    --red: #f06060; --green: #60f0a0;
+    --mono: 'DM Mono', monospace; --serif: 'Fraunces', serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: var(--mono); font-size: 13px; line-height: 1.6;
+    min-height: 100vh;
+  }
+  body::before {
+    content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image:
+      linear-gradient(rgba(200,240,96,.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(200,240,96,.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+  .container { position: relative; z-index: 1; max-width: 900px; margin: 0 auto; padding: 48px 24px 80px; }
+  header { margin-bottom: 40px; }
+  .label { font-size: 10px; letter-spacing: .14em; color: var(--accent); text-transform: uppercase; margin-bottom: 8px; }
+  h1 { font-family: var(--serif); font-size: clamp(2rem,5vw,3rem); font-weight: 300; line-height: 1.1; margin-bottom: 6px; }
+  h1 em { font-style: italic; color: var(--accent); }
+  .subtitle { color: var(--muted); font-size: 12px; }
+  .search-wrap { display: flex; gap: 8px; margin-bottom: 12px; }
+  .search-input {
+    flex: 1; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; padding: 12px 16px; font-family: var(--mono);
+    font-size: 13px; color: var(--text); outline: none; transition: border-color .2s;
+  }
+  .search-input::placeholder { color: var(--muted); }
+  .search-input:focus { border-color: var(--accent); }
+  .search-btn {
+    background: var(--accent); color: #0e0f11; border: none;
+    border-radius: 6px; padding: 12px 20px; font-family: var(--mono);
+    font-size: 12px; font-weight: 500; cursor: pointer; white-space: nowrap;
+    transition: opacity .15s, transform .1s;
+  }
+  .search-btn:hover { opacity: .9; }
+  .search-btn:active { transform: scale(.98); }
+  .search-btn:disabled { opacity: .4; cursor: not-allowed; }
+  .examples { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 32px; }
+  .examples span { font-size: 10px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; align-self: center; margin-right: 4px; }
+  .ex-btn {
+    background: transparent; border: 1px solid var(--border); border-radius: 4px;
+    padding: 4px 10px; font-family: var(--mono); font-size: 11px;
+    color: var(--muted); cursor: pointer; transition: all .15s;
+  }
+  .ex-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .error-banner {
+    background: rgba(240,96,96,.1); border: 1px solid rgba(240,96,96,.3);
+    border-radius: 6px; padding: 12px 16px; color: var(--red);
+    font-size: 12px; margin-bottom: 20px; display: none;
+  }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; transition: border-color .2s; }
+  .card:hover { border-color: #3a3d48; }
+  .card-full { grid-column: 1 / -1; }
+  .card-header { display: flex; align-items: center; justify-content: space-between; padding: 11px 14px 9px; border-bottom: 1px solid var(--border); }
+  .card-title { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border); transition: background .3s; flex-shrink: 0; }
+  .dot.loading { background: var(--accent3); animation: pulse 1s infinite; }
+  .dot.ok { background: var(--green); }
+  .dot.warn { background: var(--accent3); }
+  .dot.error { background: var(--red); }
+  .dot.empty { background: var(--muted); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .card-body { padding: 12px 14px 14px; min-height: 80px; }
+  .placeholder { color: var(--muted); font-size: 11px; font-style: italic; }
+  .field { margin-bottom: 6px; }
+  .field:last-child { margin-bottom: 0; }
+  .fk { font-size: 10px; color: var(--muted); margin-bottom: 1px; }
+  .fv { font-size: 12px; color: var(--text); word-break: break-word; }
+  .fv.a { color: var(--accent); }
+  .fv.a2 { color: var(--accent2); }
+  .fv.a3 { color: var(--accent3); }
+  .fv.r { color: var(--red); }
+  .pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    border-radius: 4px; padding: 3px 8px; font-size: 10px; margin-top: 6px;
+    background: rgba(240,160,96,.1); border: 1px solid rgba(240,160,96,.3); color: var(--accent3);
+  }
+  .pill-green { background: rgba(96,240,160,.08); border-color: rgba(96,240,160,.3); color: var(--green); }
+  .pill-red   { background: rgba(240,96,96,.08);  border-color: rgba(240,96,96,.3);  color: var(--red); }
+  .divider { border: none; border-top: 1px solid var(--border); margin: 8px 0; }
+  .source { font-size: 9px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); opacity: .6; padding: 0 14px 10px; }
+  #map { width: 100%; height: 260px; background: var(--surface2); position: relative; overflow: hidden; }
+  #map iframe { width: 100%; height: 100%; border: none; }
+  .map-ph { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--muted); font-size: 11px; font-style: italic; }
+  .coord-bar { display: flex; gap: 16px; padding: 8px 14px; background: var(--surface2); border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); display: none; }
+  .coord-bar span { color: var(--accent2); }
+  .meta-bar { display: flex; gap: 12px; flex-wrap: wrap; padding: 8px 14px 10px; border-top: 1px solid var(--border); font-size: 10px; color: var(--muted); display: none; }
+  .meta-bar .ms { color: var(--accent); }
+  footer { margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border); color: var(--muted); font-size: 10px; letter-spacing: .06em; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<header>
+  <div class="label">// Norske offentlige datakilder</div>
+  <h1>Eiendoms<em>data</em></h1>
+  <p class="subtitle">Kartverket · Geonorge · NGU · NVE</p>
+</header>
+
+<div class="search-wrap">
+  <input class="search-input" id="inp" type="text" placeholder="Storgata 1, Oslo" autocomplete="off">
+  <button class="search-btn" id="btn" onclick="sok()">Hent data →</button>
+</div>
+
+<div class="examples">
+  <span>eks:</span>
+  <button class="ex-btn" onclick="fyll('Karl Johans gate 1, Oslo')">Karl Johans gate 1, Oslo</button>
+  <button class="ex-btn" onclick="fyll('Bryggen 1, Bergen')">Bryggen 1, Bergen</button>
+  <button class="ex-btn" onclick="fyll('Storgata 1, Elverum')">Storgata 1, Elverum</button>
+</div>
+
+<div class="error-banner" id="err"></div>
+
+<div class="grid" id="grid">
+
+  <div class="card card-full" id="kart-card">
+    <div class="card-header"><span class="card-title">Kart</span><span class="dot" id="dot-kart"></span></div>
+    <div id="map"><div class="map-ph">Søk etter en adresse for å vise kart</div></div>
+    <div class="coord-bar" id="coords">
+      Lat: <span id="clat">–</span> &nbsp; Lon: <span id="clon">–</span> &nbsp; UTM33N: <span id="cutm">–</span>
+    </div>
+  </div>
+
+  <div class="card" id="adr-card">
+    <div class="card-header"><span class="card-title">Adresse / Matrikkel</span><span class="dot" id="dot-adr"></span></div>
+    <div class="card-body" id="body-adr"><p class="placeholder">Søk etter en adresse</p></div>
+    <div class="source">kartverket · ws.geonorge.no/adresser</div>
+  </div>
+
+  <div class="card" id="teig-card">
+    <div class="card-header"><span class="card-title">Eiendomsteig</span><span class="dot" id="dot-teig"></span></div>
+    <div class="card-body" id="body-teig"><p class="placeholder">Søk etter en adresse</p></div>
+    <div class="source">geonorge · wfs eiendomskart</div>
+  </div>
+
+  <div class="card" id="plan-card">
+    <div class="card-header"><span class="card-title">Reguleringsplan</span><span class="dot" id="dot-plan"></span></div>
+    <div class="card-body" id="body-plan"><p class="placeholder">Søk etter en adresse</p></div>
+    <div class="source">kartverket · reguleringsplaner WMS</div>
+  </div>
+
+  <div class="card" id="los-card">
+    <div class="card-header"><span class="card-title">Løsmasser (NGU)</span><span class="dot" id="dot-los"></span></div>
+    <div class="card-body" id="body-los"><p class="placeholder">Søk etter en adresse</p></div>
+    <div class="source">ngu · geo.ngu.no/mapserver/losmasse</div>
+  </div>
+
+  <div class="card" id="berg-card">
+    <div class="card-header"><span class="card-title">Berggrunn (NGU)</span><span class="dot" id="dot-berg"></span></div>
+    <div class="card-body" id="body-berg"><p class="placeholder">Søk etter en adresse</p></div>
+    <div class="source">ngu · geo.ngu.no/mapserver/berggrunn</div>
+  </div>
+
+  <div class="card" id="skred-card">
+    <div class="card-header"><span class="card-title">Skredfare (NVE)</span><span class="dot" id="dot-skred"></span></div>
+    <div class="card-body" id="body-skred"><p class="placeholder">Søk etter en adresse</p></div>
+    <div class="source">nve · gis3.nve.no skredfaresoner</div>
+  </div>
+
+  <div class="card" id="flom-card">
+    <div class="card-header"><span class="card-title">Flomsone (NVE)</span><span class="dot" id="dot-flom"></span></div>
+    <div class="card-body" id="body-flom"><p class="placeholder">Søk etter en adresse</p></div>
+    <div class="source">nve · gis3.nve.no flomsoner</div>
+  </div>
+
+  <div class="card" id="js-card">
+    <div class="card-header"><span class="card-title">Jordskredvarsel (NVE)</span><span class="dot" id="dot-js"></span></div>
+    <div class="card-body" id="body-js"><p class="placeholder">Søk etter en adresse</p></div>
+    <div class="source">nve · api.nve.no/hydrology/forecast/landslide</div>
+  </div>
+
+</div>
+
+<div class="meta-bar" id="meta">
+  Hentet på <span class="ms" id="ms">–</span>ms &nbsp;·&nbsp;
+  Cachet: <span id="cached">–</span> &nbsp;·&nbsp;
+  Kommune: <span id="kommune">–</span>
+</div>
+
+<footer>
+  <span>Data fra åpne norske offentlige kilder · NLOD</span>
+  <span>Kilde: <a href="https://www.kartverket.no" target="_blank" style="color:var(--muted)">Kartverket</a> · NGU · NVE</span>
+</footer>
+
+</div>
+
+<script>
+const API_URL = 'https://din-api.railway.app'; // ← BYTT TIL DIN RAILWAY-URL
+const API_KEY = 'bytt-meg'; // ← BYTT TIL DIN NØKKEL
+
+function fyll(a) { document.getElementById('inp').value = a; sok(); }
+function dot(id, s) { const el = document.getElementById('dot-' + id); if (el) el.className = 'dot ' + s; }
+function body(id, h) { const el = document.getElementById('body-' + id); if (el) el.innerHTML = h; }
+function f(key, val, cls = '') {
+  return `<div class="field"><div class="fk">${key}</div><div class="fv ${cls}">${val}</div></div>`;
+}
+
+function visError(msg) {
+  const el = document.getElementById('err');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function skjulError() {
+  document.getElementById('err').style.display = 'none';
+}
+
+async function sok() {
+  const adresse = document.getElementById('inp').value.trim();
+  if (!adresse) return;
+
+  skjulError();
+  const btn = document.getElementById('btn');
+  btn.disabled = true;
+  btn.textContent = 'Henter…';
+
+  ['kart','adr','teig','plan','los','berg','skred','flom','js'].forEach(id => {
+    dot(id, 'loading');
+    if (id !== 'kart') body(id, '<p class="placeholder">Henter…</p>');
+  });
+  document.getElementById('map').innerHTML = '<div class="map-ph">Henter koordinater…</div>';
+  document.getElementById('coords').style.display = 'none';
+  document.getElementById('meta').style.display = 'none';
+
+  try {
+    const r = await fetch(`${API_URL}/eiendom?adresse=${encodeURIComponent(adresse)}`, { headers: { 'X-Api-Key': API_KEY } });
+    const d = await r.json();
+
+    if (!r.ok) {
+      visError(d.feil ?? 'Noe gikk galt');
+      ['kart','adr','teig','plan','los','berg','skred','flom','js'].forEach(id => dot(id, 'empty'));
+      body('adr', `<p class="placeholder">${d.feil ?? 'Feil'}</p>`);
+      return;
+    }
+
+    visKart(d);
+    visAdresse(d);
+    visTeig(d.teig);
+    visPlan(d.reguleringsplan);
+    visLosmasse(d.losmasser);
+    visBerggrunn(d.berggrunn);
+    visSkred(d.skredfare);
+    visFlom(d.flomsone);
+    visJordskred(d.jordskredvarsel);
+    visMeta(d.meta);
+
+  } catch (e) {
+    visError(`Kunne ikke nå API-et (${API_URL}). Sjekk at Railway-tjenesten kjører.`);
+    ['kart','adr','teig','plan','los','berg','skred','flom','js'].forEach(id => dot(id, 'error'));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Hent data →';
+  }
+}
+
+function visKart(d) {
+  const { lat, lon } = d.koordinater;
+  document.getElementById('map').innerHTML =
+    `<iframe src="https://www.openstreetmap.org/export/embed.html?bbox=${lon-.004},${lat-.003},${lon+.004},${lat+.003}&layer=mapnik&marker=${lat},${lon}" loading="lazy"></iframe>`;
+  document.getElementById('clat').textContent = lat.toFixed(5);
+  document.getElementById('clon').textContent = lon.toFixed(5);
+  document.getElementById('cutm').textContent = `${d.koordinater.utmOst}E ${d.koordinater.utmNord}N`;
+  document.getElementById('coords').style.display = 'flex';
+  dot('kart', 'ok');
+}
+
+function visAdresse(d) {
+  const m = d.meta;
+  const k = d.matrikkel;
+  body('adr',
+    f('Adresse', m.adresse, 'a') +
+    f('Poststed', `${m.postnummer} ${m.poststed}`) +
+    f('Kommune', `${m.kommunenavn} (${m.kommunenummer})`) +
+    f('Matrikkel', `Gnr ${k.gardsnummer} / Bnr ${k.bruksnummer}${k.seksjonsnummer ? ' / S' + k.seksjonsnummer : ''}${k.festenummer ? ' / F' + k.festenummer : ''}`, 'a2')
+  );
+  dot('adr', 'ok');
+}
+
+function visTeig(t) {
+  if (t?.feil) { body('teig', '<p class="placeholder" style="color:var(--red)">Oppslagsfeil</p>'); dot('teig','error'); return; }
+  if (!t?.funnet) { body('teig', `<div class="pill">Ingen teig i dette området</div>`); dot('teig','empty'); return; }
+  body('teig',
+    (t.matrikkelnummer ? f('Matrikkel', t.matrikkelnummer, 'a2') : '') +
+    (t.arealM2 ? f('Teigareal', `${t.arealM2.toLocaleString('no')} m²`, 'a') : '') +
+    (t.nøyaktighet ? f('Nøyaktighet', t.nøyaktighet) : '') +
+    f('Antall teiger i område', t.antallTeiger) +
+    (t.fellesTeig ? `<div class="pill">Teig delt av flere eiendommer</div>` : '')
+  );
+  dot('teig','ok');
+}
+
+function visPlan(p) {
+  if (p?.feil) { body('plan', '<p class="placeholder" style="color:var(--red)">Oppslagsfeil</p>'); dot('plan','error'); return; }
+  if (!p?.funnet) {
+    body('plan', `<div class="pill">Ikke funnet i nasjonal WFS</div>${f('Søk manuelt', `<a href="${p?.lenke}" target="_blank" style="color:var(--accent2)">arealplaner.kartverket.no ↗</a>`)}`);
+    dot('plan','empty'); return;
+  }
+  body('plan',
+    f('Plannavn', p.plannavn ?? '–', 'a') +
+    f('Plantype', p.plantype ?? '–') +
+    f('Status', p.planstatus ?? '–') +
+    f('Lenke', `<a href="${p.lenke}" target="_blank" style="color:var(--accent2)">arealplaner.kartverket.no ↗</a>`)
+  );
+  dot('plan','ok');
+}
+
+function visLosmasse(l) {
+  if (l?.feil) { body('los', '<p class="placeholder" style="color:var(--red)">Oppslagsfeil</p>'); dot('los','error'); return; }
+  if (!l?.funnet) { body('los', `<div class="pill">Ingen data for dette punktet</div>`); dot('los','empty'); return; }
+  body('los',
+    f('Type', l.type ?? '–', 'a') +
+    (l.marinGrense ? f('Marin grense (m.o.h.)', l.marinGrense) : '') +
+    (l.kornstorrelse ? f('Kornstørrelse', l.kornstorrelse) : '')
+  );
+  dot('los','ok');
+}
+
+function visBerggrunn(b) {
+  if (b?.feil) { body('berg', '<p class="placeholder" style="color:var(--red)">Oppslagsfeil</p>'); dot('berg','error'); return; }
+  if (!b?.funnet) { body('berg', `<div class="pill">Ingen data for dette punktet</div>`); dot('berg','empty'); return; }
+  body('berg',
+    f('Bergart', b.bergart ?? '–', 'a') +
+    (b.alder  ? f('Geologisk alder', b.alder) : '') +
+    (b.genese ? f('Genese', b.genese) : '')
+  );
+  dot('berg','ok');
+}
+
+function visSkred(s) {
+  if (s?.feil) { body('skred', '<p class="placeholder" style="color:var(--red)">Oppslagsfeil</p>'); dot('skred','error'); return; }
+  if (!s?.funnet || !s.soner?.length) {
+    body('skred', `<div class="pill pill-green">Ikke i kartlagt farefaresone</div>`);
+    dot('skred','ok'); return;
+  }
+  const html = s.soner.map((sone, i) =>
+    (i > 0 ? '<hr class="divider">' : '') +
+    f('Sone', sone.type ?? '–', 'r') +
+    (sone.fareklasse ? f('Fareklasse', sone.fareklasse) : '') +
+    (sone.intervall ? f('Gjentaksintervall', sone.intervall) : '')
+  ).join('') + `<div class="pill pill-red">⚠ Skredfaredata funnet</div>`;
+  body('skred', html);
+  dot('skred','warn');
+}
+
+function visFlom(fl) {
+  if (fl?.feil) { body('flom', '<p class="placeholder" style="color:var(--red)">Oppslagsfeil</p>'); dot('flom','error'); return; }
+  if (!fl?.funnet || !fl.soner?.length) {
+    body('flom', `<div class="pill pill-green">Ikke i kartlagt flomsone</div>`);
+    dot('flom','ok'); return;
+  }
+  const html = fl.soner.map((sone, i) =>
+    (i > 0 ? '<hr class="divider">' : '') +
+    f('Sone', sone.navn ?? '–', 'a3') +
+    (sone.intervall ? f('Gjentaksintervall', sone.intervall) : '')
+  ).join('') + `<div class="pill">⚠ I flomsone</div>`;
+  body('flom', html);
+  dot('flom','warn');
+}
+
+function visJordskred(j) {
+  if (!j?.funnet && j?.feil) { body('js', '<p class="placeholder" style="color:var(--red)">Oppslagsfeil</p>'); dot('js','error'); return; }
+  if (!j?.funnet) { body('js', `<div class="pill">Ikke tilgjengelig</div>`); dot('js','empty'); return; }
+  const niva = j.aktsomhetsniva;
+  const cls = niva >= 4 ? 'r' : niva >= 3 ? 'a3' : niva >= 2 ? 'a' : '';
+  body('js',
+    f('Aktsomhetsnivå', j.tekst, cls) +
+    f('Dato', j.dato) +
+    (j.regionMatch ? `<div class="pill pill-green">Varsel for din region</div>` : `<div class="pill">Regionalt varsel</div>`)
+  );
+  dot('js', niva >= 3 ? 'warn' : 'ok');
+}
+
+function visMeta(m) {
+  document.getElementById('ms').textContent = m.hentetMs;
+  document.getElementById('cached').textContent = m.cachet ? 'Ja' : 'Nei';
+  document.getElementById('kommune').textContent = `${m.kommunenavn} (${m.kommunenummer})`;
+  document.getElementById('meta').style.display = 'flex';
+}
+
+document.getElementById('inp').addEventListener('keydown', e => { if (e.key === 'Enter') sok(); });
+</script>
+</body>
+</html>
