@@ -4,7 +4,7 @@ import helmet from 'helmet';
 import eiendomRuter from './src/routes/eiendom.js';
 import adminRuter from './src/routes/admin.js';
 import { perIpLimiter, globalLimiter } from './src/middleware/rateLimiter.js';
-import { sjekkApiNøkkel } from './src/middleware/apiNøkkel.js';
+import { sjekkApiNøkkel } from './src/middleware/apiNokkel.js';
 import { migrerFraEnv } from './src/db.js';
 
 migrerFraEnv();
