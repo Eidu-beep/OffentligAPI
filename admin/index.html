@@ -113,7 +113,7 @@
 <div id="toast" class="toast"></div>
 
 <script>
-const API_URL = 'https://offentligapi-production.up.railway.app'; // ← BYTT TIL DIN RAILWAY-URL
+const API_URL = 'https://din-api.railway.app'; // ← BYTT TIL DIN RAILWAY-URL
 let adminKey = '';
 
 function toast(t) {
@@ -152,7 +152,7 @@ async function loggInn() {
 
 async function lastNokler() {
   try {
-    const d = await api('/nøkler');
+    const d = await api('/nokler');
     visNokler(d.nøkler);
   } catch (e) {
     const el = document.getElementById('feil');
@@ -193,7 +193,7 @@ async function opprettNokkel() {
   const dagligGrense = document.getElementById('ny-grense').value || '0';
   if (!kundenavn) { toast('Kundenavn er påkrevd'); return; }
   try {
-    const ny = await api('/nøkler', { method: 'POST', body: JSON.stringify({ kundenavn, epost, dagligGrense }) });
+    const ny = await api('/nokler', { method: 'POST', body: JSON.stringify({ kundenavn, epost, dagligGrense }) });
     const boks = document.getElementById('ny-nokkel-boks');
     boks.innerHTML = `Ny nøkkel opprettet — kopier den nå:<br><strong style="cursor:pointer" onclick="kopier('${ny.nøkkel}')">${ny.nøkkel}</strong>`;
     boks.classList.remove('hidden');
@@ -206,7 +206,7 @@ async function opprettNokkel() {
 
 async function byttAktiv(nøkkel, aktiv) {
   try {
-    await api(`/nøkler/${nøkkel}/aktiv`, { method: 'PATCH', body: JSON.stringify({ aktiv: !!aktiv }) });
+    await api(`/nokler/${nøkkel}/aktiv`, { method: 'PATCH', body: JSON.stringify({ aktiv: !!aktiv }) });
     toast(aktiv ? 'Aktivert' : 'Deaktivert');
     lastNokler();
   } catch (e) { toast(e.message); }
@@ -215,7 +215,7 @@ async function byttAktiv(nøkkel, aktiv) {
 async function slett(nøkkel, navn) {
   if (!confirm(`Slette nøkkelen til "${navn}"? Dette kan ikke angres.`)) return;
   try {
-    await api(`/nøkler/${nøkkel}`, { method: 'DELETE' });
+    await api(`/nokler/${nøkkel}`, { method: 'DELETE' });
     toast('Slettet');
     lastNokler();
   } catch (e) { toast(e.message); }
