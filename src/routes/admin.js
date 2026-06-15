@@ -30,12 +30,12 @@ router.get('/status', (_req, res) => {
 });
 
 // List alle nøkler
-router.get('/nøkler', (_req, res) => {
+router.get('/nokler', (_req, res) => {
   res.json({ dato: new Date().toISOString().split('T')[0], nøkler: listNøkler() });
 });
 
 // Opprett ny nøkkel
-router.post('/nøkler', (req, res) => {
+router.post('/nokler', (req, res) => {
   const { kundenavn, epost, dagligGrense } = req.body || {};
   if (!kundenavn) return res.status(400).json({ feil: 'kundenavn er påkrevd' });
   const ny = opprettNøkkel({
@@ -47,31 +47,31 @@ router.post('/nøkler', (req, res) => {
 });
 
 // Deaktiver / aktiver
-router.patch('/nøkler/:nøkkel/aktiv', (req, res) => {
+router.patch('/nokler/:nokkel/aktiv', (req, res) => {
   const { aktiv } = req.body || {};
-  const ok = settAktiv(req.params.nøkkel, !!aktiv);
+  const ok = settAktiv(req.params.nokkel, !!aktiv);
   if (!ok) return res.status(404).json({ feil: 'Nøkkel ikke funnet' });
-  res.json({ ok: true, nøkkel: req.params.nøkkel, aktiv: !!aktiv });
+  res.json({ ok: true, nøkkel: req.params.nokkel, aktiv: !!aktiv });
 });
 
 // Endre grense
-router.patch('/nøkler/:nøkkel/grense', (req, res) => {
+router.patch('/nokler/:nokkel/grense', (req, res) => {
   const { dagligGrense } = req.body || {};
-  const ok = oppdaterGrense(req.params.nøkkel, parseInt(dagligGrense || '0'));
+  const ok = oppdaterGrense(req.params.nokkel, parseInt(dagligGrense || '0'));
   if (!ok) return res.status(404).json({ feil: 'Nøkkel ikke funnet' });
-  res.json({ ok: true, nøkkel: req.params.nøkkel, dagligGrense: parseInt(dagligGrense || '0') });
+  res.json({ ok: true, nøkkel: req.params.nokkel, dagligGrense: parseInt(dagligGrense || '0') });
 });
 
 // Slett
-router.delete('/nøkler/:nøkkel', (req, res) => {
-  const ok = slettNøkkel(req.params.nøkkel);
+router.delete('/nokler/:nokkel', (req, res) => {
+  const ok = slettNøkkel(req.params.nokkel);
   if (!ok) return res.status(404).json({ feil: 'Nøkkel ikke funnet' });
-  res.json({ ok: true, slettet: req.params.nøkkel });
+  res.json({ ok: true, slettet: req.params.nokkel });
 });
 
 // Bruk-historikk for én nøkkel
-router.get('/nøkler/:nøkkel/historikk', (req, res) => {
-  res.json({ nøkkel: req.params.nøkkel, historikk: brukHistorikk(req.params.nøkkel, 30) });
+router.get('/nokler/:nokkel/historikk', (req, res) => {
+  res.json({ nøkkel: req.params.nokkel, historikk: brukHistorikk(req.params.nokkel, 30) });
 });
 
 export default router;
