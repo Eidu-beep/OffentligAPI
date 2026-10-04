@@ -1,16 +1,27 @@
 import Database from 'better-sqlite3';
 import { randomBytes } from 'crypto';
 import { existsSync, mkdirSync } from 'fs';
-import { dirname } from 'path';
+import { dirname, join, resolve, sep } from 'path';
 
-// Databasefil. På Railway settes DB_PATH til et persistent volum, f.eks. /data/eiendom.db
-const DB_PATH = process.env.DB_PATH || './data/eiendom.db';
+// Databasefil. Den må ligge på et persistent volum, ellers slettes alle API-nøkler ved hver deploy.
+// Railway setter RAILWAY_VOLUME_MOUNT_PATH når et volum er koblet til tjenesten. Da legges
+// databasen der automatisk. DB_PATH kan fortsatt settes for å overstyre plasseringen.
+const VOLUM = process.env.RAILWAY_VOLUME_MOUNT_PATH || null;
+const DB_PATH = process.env.DB_PATH || (VOLUM ? join(VOLUM, 'eiendom.db') : './data/eiendom.db');
 
 const mappe = dirname(DB_PATH);
 if (!existsSync(mappe)) mkdirSync(mappe, { recursive: true });
 
 const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
+
+// Sier fra i loggen om nøklene er trygge. Vises i Railway under Deployments → View logs.
+const dbSti = resolve(DB_PATH);
+export const paVolum = !!VOLUM && dbSti.startsWith(resolve(VOLUM) + sep);
+console.log(`Database: ${dbSti}${paVolum ? ` (persistent volum på ${VOLUM})` : ''}`);
+if (process.env.NODE_ENV === 'production' && !paVolum) {
+  console.warn('ADVARSEL: Databasen ligger ikke på et persistent volum. Alle API-nøkler slettes ved neste deploy.');
+}
 
 // Opprett tabeller hvis de ikke finnes
 db.exec(`

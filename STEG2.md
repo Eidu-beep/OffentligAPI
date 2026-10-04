@@ -1,3 +1,5 @@
+> **Eldre dokument.** Deler av innholdet er utdatert. Gjeldende dokumentasjon ligger i `CLAUDE.md`.
+
 # Steg 2 — Database og admin-side
 
 ## Hva som er nytt

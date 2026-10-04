@@ -1,83 +1,56 @@
 # Eiendomsdata API
 
-Tre-lags system for norsk eiendomsdata fra åpne offentlige kilder.
+API som samler norske eiendomsdata per adresse fra åpne offentlige kilder, og selger tilgang via API-nøkler.
 
-## Kom i gang lokalt
+**Gjeldende dokumentasjon ligger i `CLAUDE.md`.** `SPEC.md` og `STEG2.md` er eldre og delvis utdaterte.
+
+## Kjøre lokalt
+
+Krever Node 22 eller nyere.
 
 ```bash
-# Installer avhengigheter
 npm install
+npm test
+```
 
-# Kopier miljøvariabler
-cp .env.example .env
+Start serveren med testverdier (PowerShell):
 
-# Start i utviklingsmodus
-npm run dev
+```powershell
+$env:ADMIN_KEY="lokal-admin"; $env:API_KEYS="lokal-nokkel:Test:0"; node server.js
 ```
 
 Test at det virker:
+
 ```
 http://localhost:3000/helse
-http://localhost:3000/eiendom?adresse=Storgata+1,+Oslo
-http://localhost:3000/cache/statistikk
+http://localhost:3000/eiendom?adresse=Storgata+1,+Oslo&api_key=lokal-nokkel
 ```
 
----
+## Deploy
 
-## Deploy — Lag 2: API på Railway
+- API: Railway, bygges fra repo-roten. Databasen må ligge på et volum, ellers slettes API-nøklene ved hver deploy.
+- Demo-nettside: Netlify, publish directory `frontend`.
+- Admin-side: Netlify, publish directory `admin`.
 
-1. Gå til [railway.app](https://railway.app) og opprett konto
-2. Klikk **New Project** → **Empty Project**
-3. Klikk **Add Service** → **GitHub Repo** (eller last opp manuelt)
-4. Under **Settings → Variables**, legg inn:
+Hver push til `main` deployer alle tre. Miljøvariabler og oppsett er beskrevet i `CLAUDE.md`.
 
-```
-NODE_ENV=production
-ALLOWED_ORIGINS=https://din-nettside.netlify.app
-CACHE_MAX_KEYS=10000
-```
+## Endepunkter
 
-5. Railway setter PORT automatisk — ikke legg inn PORT manuelt
-6. Etter deploy: kopier URL-en Railway gir deg (f.eks. `eiendomsapi.up.railway.app`)
-
----
-
-## Deploy — Lag 1: Nettside på Netlify
-
-1. Åpne `frontend/index.html`
-2. Bytt ut linjen:
-   ```js
-   const API_URL = 'https://din-api.railway.app';
-   ```
-   med din Railway-URL
-3. Gå til [netlify.com/drop](https://app.netlify.com/drop)
-4. Dra `frontend/`-mappen inn i nettleseren
-5. Netlify gir deg en URL — kopier den tilbake til Railway som `ALLOWED_ORIGINS`
-
----
-
-## API-referanse
-
-### `GET /eiendom?adresse=<streng>`
-Returnerer alle tilgjengelige data for adressen.
-
-### `GET /helse`
-Helsesjekk. Returnerer `{ "ok": true }`.
-
-### `GET /cache/statistikk`
-Cache-status: antall nøkler, treff-rate.
-
----
+| Metode | Sti | Beskrivelse |
+|--------|-----|-------------|
+| GET | `/helse` | Åpen helsesjekk |
+| GET | `/eiendom?adresse=...` | Alle data for adressen. Krever header `X-Api-Key` |
+| GET, POST, PATCH, DELETE | `/admin/...` | Administrasjon av nøkler. Krever header `X-Admin-Key` |
 
 ## Datakilder
 
-| Kilde | Data | Tilgang |
-|-------|------|---------|
-| Kartverket adresse-API | Koordinater, matrikkel | Åpent |
-| Geonorge WFS | Eiendomsteig, grenser | Åpent |
-| Kartverket WMS | Reguleringsplaner | Åpent |
-| NGU WMS | Løsmasser, berggrunn | Åpent |
-| NVE ArcGIS REST | Skredfare, flomsoner | Åpent |
-| NVE REST | Jordskredvarsel | Åpent |
+| Kilde | Data | Lisens |
+|-------|------|--------|
+| Kartverket, adresse-API | Adresse, koordinater, matrikkelnummer | CC BY 4.0 |
+| Kartverket, eiendoms-API | Eiendomsteiger og areal | CC BY 4.0 |
+| NGU, WMS | Løsmasser og berggrunn | NLOD 2.0 |
+| NVE, karttjenester | Faresoner for skred, flomsoner og aktsomhetskart | NLOD 2.0 |
+| NVE, varsling | Jordskredvarsel | NLOD 2.0 |
+| DiBK, nasjonal planbase | Reguleringsplaner. Ikke åpne data, slått av som standard | Norge digitalt-lisens |
 
-Alle data lisensiert under NLOD 2.0.
+Kilde: Kartverket, NGU og NVE.

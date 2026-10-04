@@ -28,7 +28,12 @@ router.get('/', async (req, res) => {
   const { lat, lon, kommunenummer } = stedsdata;
 
   const [teig, plan, losmasse, berggrunn, skred, flom, jordskred] = await Promise.allSettled([
-    hentTeig(lat, lon),
+    hentTeig(lat, lon, {
+      kommunenummer,
+      gardsnummer: stedsdata.gardsnummer,
+      bruksnummer: stedsdata.bruksnummer,
+      festenummer: stedsdata.festenummer,
+    }),
     hentPlan(lat, lon),
     hentLosmasse(lat, lon),
     hentBerggrunn(lat, lon),
@@ -48,6 +53,7 @@ router.get('/', async (req, res) => {
       kommunenummer:   stedsdata.kommunenummer,
       cachet:          stedsdata.cachet,
       hentetMs,
+      kilder:          'Kartverket (CC BY 4.0), NGU og NVE (NLOD 2.0)',
     },
     koordinater: {
       lat:     stedsdata.lat,
@@ -56,10 +62,10 @@ router.get('/', async (req, res) => {
       utmOst:  stedsdata.utmOst,
     },
     matrikkel: {
-      gardsnummer:   teig?.gardsnummer ?? stedsdata.gardsnummer,
-      bruksnummer:   teig?.bruksnummer ?? stedsdata.bruksnummer,
-      seksjonsnummer: stedsdata.seksjonsnummer,
-      festenummer:   stedsdata.festenummer,
+      gardsnummer:     stedsdata.gardsnummer ?? teig?.gardsnummer ?? null,
+      bruksnummer:     stedsdata.bruksnummer ?? teig?.bruksnummer ?? null,
+      seksjonsnummer:  stedsdata.seksjonsnummer,
+      festenummer:     stedsdata.festenummer,
       matrikkelnummer: teig?.matrikkelnummer ?? null,
     },
     teig,

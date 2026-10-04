@@ -94,6 +94,7 @@
   .pill-green { background: rgba(96,240,160,.08); border-color: rgba(96,240,160,.3); color: var(--green); }
   .pill-red   { background: rgba(240,96,96,.08);  border-color: rgba(240,96,96,.3);  color: var(--red); }
   .divider { border: none; border-top: 1px solid var(--border); margin: 8px 0; }
+  .note { color: var(--muted); font-size: 11px; margin-top: 6px; }
   .source { font-size: 9px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); opacity: .6; padding: 0 14px 10px; }
   #map { width: 100%; height: 260px; background: var(--surface2); position: relative; overflow: hidden; }
   #map iframe { width: 100%; height: 100%; border: none; }
@@ -122,7 +123,7 @@
 <div class="examples">
   <span>eks:</span>
   <button class="ex-btn" onclick="fyll('Karl Johans gate 1, Oslo')">Karl Johans gate 1, Oslo</button>
-  <button class="ex-btn" onclick="fyll('Bryggen 1, Bergen')">Bryggen 1, Bergen</button>
+  <button class="ex-btn" onclick="fyll('Bryggen 11, Bergen')">Bryggen 11, Bergen</button>
   <button class="ex-btn" onclick="fyll('Storgata 1, Elverum')">Storgata 1, Elverum</button>
 </div>
 
@@ -147,43 +148,43 @@
   <div class="card" id="teig-card">
     <div class="card-header"><span class="card-title">Eiendomsteig</span><span class="dot" id="dot-teig"></span></div>
     <div class="card-body" id="body-teig"><p class="placeholder">Søk etter en adresse</p></div>
-    <div class="source">geonorge · wfs eiendomskart</div>
+    <div class="source">kartverket · ws.geonorge.no/eiendom</div>
   </div>
 
   <div class="card" id="plan-card">
     <div class="card-header"><span class="card-title">Reguleringsplan</span><span class="dot" id="dot-plan"></span></div>
     <div class="card-body" id="body-plan"><p class="placeholder">Søk etter en adresse</p></div>
-    <div class="source">kartverket · reguleringsplaner WMS</div>
+    <div class="source">dibk · nasjonal planbase</div>
   </div>
 
   <div class="card" id="los-card">
     <div class="card-header"><span class="card-title">Løsmasser (NGU)</span><span class="dot" id="dot-los"></span></div>
     <div class="card-body" id="body-los"><p class="placeholder">Søk etter en adresse</p></div>
-    <div class="source">ngu · geo.ngu.no/mapserver/losmasse</div>
+    <div class="source">ngu · løsmasser (wms)</div>
   </div>
 
   <div class="card" id="berg-card">
     <div class="card-header"><span class="card-title">Berggrunn (NGU)</span><span class="dot" id="dot-berg"></span></div>
     <div class="card-body" id="body-berg"><p class="placeholder">Søk etter en adresse</p></div>
-    <div class="source">ngu · geo.ngu.no/mapserver/berggrunn</div>
+    <div class="source">ngu · berggrunn (wms)</div>
   </div>
 
   <div class="card" id="skred-card">
     <div class="card-header"><span class="card-title">Skredfare (NVE)</span><span class="dot" id="dot-skred"></span></div>
     <div class="card-body" id="body-skred"><p class="placeholder">Søk etter en adresse</p></div>
-    <div class="source">nve · gis3.nve.no skredfaresoner</div>
+    <div class="source">nve · faresoner og aktsomhetskart</div>
   </div>
 
   <div class="card" id="flom-card">
     <div class="card-header"><span class="card-title">Flomsone (NVE)</span><span class="dot" id="dot-flom"></span></div>
     <div class="card-body" id="body-flom"><p class="placeholder">Søk etter en adresse</p></div>
-    <div class="source">nve · gis3.nve.no flomsoner</div>
+    <div class="source">nve · flomsoner og aktsomhetskart</div>
   </div>
 
   <div class="card" id="js-card">
     <div class="card-header"><span class="card-title">Jordskredvarsel (NVE)</span><span class="dot" id="dot-js"></span></div>
     <div class="card-body" id="body-js"><p class="placeholder">Søk etter en adresse</p></div>
-    <div class="source">nve · api.nve.no/hydrology/forecast/landslide</div>
+    <div class="source">nve · jordskredvarsel</div>
   </div>
 
 </div>
@@ -195,7 +196,7 @@
 </div>
 
 <footer>
-  <span>Data fra åpne norske offentlige kilder · NLOD</span>
+  <span>Data fra åpne norske offentlige kilder · NLOD og CC BY 4.0</span>
   <span>Kilde: <a href="https://www.kartverket.no" target="_blank" style="color:var(--muted)">Kartverket</a> · NGU · NVE</span>
 </footer>
 
@@ -208,9 +209,26 @@ const API_KEY = 'ek_a74e6642e5cc31c551c10492d4a9bcfc17672ec77e348782';
 function fyll(a) { document.getElementById('inp').value = a; sok(); }
 function dot(id, s) { const el = document.getElementById('dot-' + id); if (el) el.className = 'dot ' + s; }
 function body(id, h) { const el = document.getElementById('body-' + id); if (el) el.innerHTML = h; }
-function f(key, val, cls = '') {
-  return `<div class="field"><div class="fk">${key}</div><div class="fv ${cls}">${val}</div></div>`;
+// Data fra eksterne kilder skal aldri tolkes som HTML
+function esc(v) {
+  return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+// Felt med ferdig HTML som verdi (brukes bare for lenker vi bygger selv)
+function fHtml(key, html, cls = '') {
+  return `<div class="field"><div class="fk">${esc(key)}</div><div class="fv ${cls}">${html}</div></div>`;
+}
+// Felt med vanlig tekst som verdi
+function f(key, val, cls = '') {
+  return fHtml(key, esc(val), cls);
+}
+function lenke(url, tekst) {
+  if (!/^https?:\/\//i.test(url ?? '')) return '';
+  return `<a href="${esc(url)}" target="_blank" rel="noopener" style="color:var(--accent2)">${esc(tekst)}</a>`;
+}
+function note(tekst) {
+  return `<p class="note">${esc(tekst)}</p>`;
+}
+const OPPSLAGSFEIL = '<p class="placeholder" style="color:var(--red)">Oppslagsfeil</p>';
 
 function visError(msg) {
   const el = document.getElementById('err');
@@ -220,6 +238,24 @@ function visError(msg) {
 
 function skjulError() {
   document.getElementById('err').style.display = 'none';
+}
+
+// API-et sover når det ikke er i bruk (Railway serverless), og det første kallet etter en pause
+// kan komme før API-et er våkent. API-et svarer alltid med JSON, også på feil. Alt annet,
+// eller ingen forbindelse, betyr «ikke våken ennå» – da prøver vi igjen.
+const VEKKEFORSOK = 4;
+const VEKKEPAUSE_MS = 2500;
+async function hentJsonFraApi(sti, valg = {}) {
+  for (let forsok = 1; ; forsok++) {
+    try {
+      const r = await fetch(`${API_URL}${sti}`, valg);
+      const d = await r.json();
+      return { r, d };
+    } catch (e) {
+      if (forsok >= VEKKEFORSOK) throw e;
+      await new Promise(ferdig => setTimeout(ferdig, VEKKEPAUSE_MS));
+    }
+  }
 }
 
 async function sok() {
@@ -240,13 +276,12 @@ async function sok() {
   document.getElementById('meta').style.display = 'none';
 
   try {
-    const r = await fetch(`${API_URL}/eiendom?adresse=${encodeURIComponent(adresse)}`, { headers: { 'X-Api-Key': API_KEY } });
-    const d = await r.json();
+    const { r, d } = await hentJsonFraApi(`/eiendom?adresse=${encodeURIComponent(adresse)}`, { headers: { 'X-Api-Key': API_KEY } });
 
     if (!r.ok) {
       visError(d.feil ?? 'Noe gikk galt');
       ['kart','adr','teig','plan','los','berg','skred','flom','js'].forEach(id => dot(id, 'empty'));
-      body('adr', `<p class="placeholder">${d.feil ?? 'Feil'}</p>`);
+      body('adr', `<p class="placeholder">${esc(d.feil ?? 'Feil')}</p>`);
       return;
     }
 
@@ -294,97 +329,137 @@ function visAdresse(d) {
 }
 
 function visTeig(t) {
-  if (t?.feil) { body('teig', '<p class="placeholder" style="color:var(--red)">Oppslagsfeil</p>'); dot('teig','error'); return; }
-  if (!t?.funnet) { body('teig', `<div class="pill">Ingen teig i dette området</div>`); dot('teig','empty'); return; }
+  if (t?.feil) { body('teig', OPPSLAGSFEIL); dot('teig','error'); return; }
+  if (!t?.funnet) { body('teig', `<div class="pill">Fant ingen teig for adressen</div>`); dot('teig','empty'); return; }
   body('teig',
     (t.matrikkelnummer ? f('Matrikkel', t.matrikkelnummer, 'a2') : '') +
-    (t.arealM2 ? f('Teigareal', `${t.arealM2.toLocaleString('no')} m²`, 'a') : '') +
-    (t.nøyaktighet ? f('Nøyaktighet', t.nøyaktighet) : '') +
-    f('Antall teiger i område', t.antallTeiger) +
+    (t.arealM2 ? f(t.antallTeiger > 1 ? 'Areal, alle teiger' : 'Teigareal', `${t.arealM2.toLocaleString('no')} m²`, 'a') : '') +
+    (t.nøyaktighet ? f('Grensenes nøyaktighet', t.nøyaktighet) : '') +
+    f('Antall teiger', t.antallTeiger) +
     (t.fellesTeig ? `<div class="pill">Teig delt av flere eiendommer</div>` : '')
   );
   dot('teig','ok');
 }
 
 function visPlan(p) {
-  if (p?.feil) { body('plan', '<p class="placeholder" style="color:var(--red)">Oppslagsfeil</p>'); dot('plan','error'); return; }
-  if (!p?.funnet) {
-    body('plan', `<div class="pill">Ikke funnet i nasjonal WFS</div>${f('Søk manuelt', `<a href="${p?.lenke}" target="_blank" style="color:var(--accent2)">arealplaner.kartverket.no ↗</a>`)}`);
+  if (p?.feil) { body('plan', OPPSLAGSFEIL); dot('plan','error'); return; }
+  if (p?.utilgjengelig) {
+    body('plan', `<div class="pill">Ikke tilgjengelig</div>` + note('Nasjonale plandata er ikke åpne data. Se kommunens planinnsyn.'));
     dot('plan','empty'); return;
   }
+  if (!p?.funnet) {
+    body('plan', `<div class="pill">Ingen plan funnet i nasjonal planbase</div>` + note('Ikke alle kommuner leverer planene sine dit. Se kommunens planinnsyn.'));
+    dot('plan','empty'); return;
+  }
+  const planlenke = lenke(p.lenke, 'Åpne i kommunens planregister ↗');
   body('plan',
     f('Plannavn', p.plannavn ?? '–', 'a') +
     f('Plantype', p.plantype ?? '–') +
     f('Status', p.planstatus ?? '–') +
-    f('Lenke', `<a href="${p.lenke}" target="_blank" style="color:var(--accent2)">arealplaner.kartverket.no ↗</a>`)
+    (p.ikrafttredelse ? f('Trådte i kraft', p.ikrafttredelse) : '') +
+    (p.antallPlaner > 1 ? f('Planer på stedet', p.antallPlaner) : '') +
+    (planlenke ? fHtml('Lenke', planlenke) : '')
   );
   dot('plan','ok');
 }
 
 function visLosmasse(l) {
-  if (l?.feil) { body('los', '<p class="placeholder" style="color:var(--red)">Oppslagsfeil</p>'); dot('los','error'); return; }
+  if (l?.feil) { body('los', OPPSLAGSFEIL); dot('los','error'); return; }
   if (!l?.funnet) { body('los', `<div class="pill">Ingen data for dette punktet</div>`); dot('los','empty'); return; }
   body('los',
     f('Type', l.type ?? '–', 'a') +
-    (l.marinGrense ? f('Marin grense (m.o.h.)', l.marinGrense) : '') +
-    (l.kornstorrelse ? f('Kornstørrelse', l.kornstorrelse) : '')
+    (l.beskrivelse ? f('Beskrivelse', l.beskrivelse) : '') +
+    (l.malestokk ? f('Kartets målestokk', l.malestokk) : '')
   );
   dot('los','ok');
 }
 
 function visBerggrunn(b) {
-  if (b?.feil) { body('berg', '<p class="placeholder" style="color:var(--red)">Oppslagsfeil</p>'); dot('berg','error'); return; }
+  if (b?.feil) { body('berg', OPPSLAGSFEIL); dot('berg','error'); return; }
   if (!b?.funnet) { body('berg', `<div class="pill">Ingen data for dette punktet</div>`); dot('berg','empty'); return; }
   body('berg',
     f('Bergart', b.bergart ?? '–', 'a') +
-    (b.alder  ? f('Geologisk alder', b.alder) : '') +
-    (b.genese ? f('Genese', b.genese) : '')
+    (b.bergartsenhet ? f('Bergartsenhet', b.bergartsenhet) : '') +
+    (b.alder ? f('Geologisk alder', b.alder) : '') +
+    (b.tektoniskEnhet ? f('Tektonisk enhet', b.tektoniskEnhet) : '') +
+    (b.datagrunnlag ? f('Datagrunnlag', b.datagrunnlag) : '')
   );
   dot('berg','ok');
 }
 
+// «Ikke i faresone» betyr bare trygt der NVE faktisk har kartlagt. Ellers viser vi aktsomhetskartene.
 function visSkred(s) {
-  if (s?.feil) { body('skred', '<p class="placeholder" style="color:var(--red)">Oppslagsfeil</p>'); dot('skred','error'); return; }
-  if (!s?.funnet || !s.soner?.length) {
-    body('skred', `<div class="pill pill-green">Ikke i kartlagt farefaresone</div>`);
-    dot('skred','ok'); return;
+  if (s?.feil) { body('skred', OPPSLAGSFEIL); dot('skred','error'); return; }
+  const soner = s?.soner ?? [];
+  // Faresonekartet for bratt terreng erstatter aktsomhetskartene der det finnes. Kvikkleire dekkes ikke av det.
+  const aktsomhet = (s?.aktsomhet ?? []).filter(a => !s?.kartlagt || a === 'Kvikkleireskred');
+  let html = '';
+
+  if (soner.length) {
+    html += soner.map((sone, i) =>
+      (i > 0 ? '<hr class="divider">' : '') +
+      f('Faresone', sone.type ?? '–', 'r') +
+      (sone.fareklasse ? f('Fareklasse', sone.fareklasse) : '')
+    ).join('') + `<div class="pill pill-red">⚠ I kartlagt faresone</div>`;
+  } else if (s?.kartlagt) {
+    html += `<div class="pill pill-green">Faresonekartlagt – utenfor faresone</div>`;
   }
-  const html = s.soner.map((sone, i) =>
-    (i > 0 ? '<hr class="divider">' : '') +
-    f('Sone', sone.type ?? '–', 'r') +
-    (sone.fareklasse ? f('Fareklasse', sone.fareklasse) : '') +
-    (sone.intervall ? f('Gjentaksintervall', sone.intervall) : '')
-  ).join('') + `<div class="pill pill-red">⚠ Skredfaredata funnet</div>`;
+
+  if (aktsomhet.length) {
+    html += (html ? '<hr class="divider">' : '') +
+      f('Aktsomhetsområde for', aktsomhet.join(', '), 'a3') +
+      `<div class="pill">Mulig fare – må vurderes nærmere</div>`;
+  } else if (!soner.length && !s?.kartlagt) {
+    html += `<div class="pill pill-green">Ikke i faresone eller aktsomhetsområde</div>` + note('Området er ikke detaljkartlagt.');
+  }
+
+  const rapport = lenke(s?.rapport, 'NVE-rapport ↗');
+  if (rapport) html += '<hr class="divider">' + fHtml('Kartlegging', rapport);
+  if (s?.ufullstendig) html += note(`Fikk ikke svar fra: ${(s.mangler ?? []).join(', ')}`);
+
   body('skred', html);
-  dot('skred','warn');
+  dot('skred', soner.length || aktsomhet.length || s?.ufullstendig ? 'warn' : 'ok');
 }
 
 function visFlom(fl) {
-  if (fl?.feil) { body('flom', '<p class="placeholder" style="color:var(--red)">Oppslagsfeil</p>'); dot('flom','error'); return; }
-  if (!fl?.funnet || !fl.soner?.length) {
-    body('flom', `<div class="pill pill-green">Ikke i kartlagt flomsone</div>`);
-    dot('flom','ok'); return;
+  if (fl?.feil) { body('flom', OPPSLAGSFEIL); dot('flom','error'); return; }
+  const soner = fl?.soner ?? [];
+  let html = '';
+
+  if (soner.length) {
+    const [forste, ...resten] = soner;
+    html += f('Innenfor flomsone', forste.navn, 'a3') +
+      (forste.lavpunkt ? f('Type', 'Lavpunkt uten direkte forbindelse til elva') : '') +
+      (resten.length ? f('Også innenfor', resten.map(z => z.navn).join(', ')) : '') +
+      `<div class="pill">⚠ I kartlagt flomsone</div>`;
+  } else if (fl?.kartlagt) {
+    html += `<div class="pill pill-green">Flomsonekartlagt – utenfor flomsone</div>`;
+  } else if (fl?.aktsomhet) {
+    html += f('Aktsomhetsområde', 'Flom', 'a3') + `<div class="pill">Mulig flomfare – må vurderes nærmere</div>`;
+  } else {
+    html += `<div class="pill pill-green">Ikke i flomsone eller aktsomhetsområde</div>` +
+      note(fl?.aktsomhetDekning === false ? 'Aktsomhetskartet dekker ikke dette området.' : 'Strekningen er ikke detaljkartlagt.');
   }
-  const html = fl.soner.map((sone, i) =>
-    (i > 0 ? '<hr class="divider">' : '') +
-    f('Sone', sone.navn ?? '–', 'a3') +
-    (sone.intervall ? f('Gjentaksintervall', sone.intervall) : '')
-  ).join('') + `<div class="pill">⚠ I flomsone</div>`;
+  if (fl?.ufullstendig) html += note(`Fikk ikke svar fra: ${(fl.mangler ?? []).join(', ')}`);
+
   body('flom', html);
-  dot('flom','warn');
+  dot('flom', soner.length || (!fl?.kartlagt && fl?.aktsomhet) || fl?.ufullstendig ? 'warn' : 'ok');
 }
 
 function visJordskred(j) {
-  if (!j?.funnet && j?.feil) { body('js', '<p class="placeholder" style="color:var(--red)">Oppslagsfeil</p>'); dot('js','error'); return; }
+  if (!j?.funnet && j?.feil) { body('js', OPPSLAGSFEIL); dot('js','error'); return; }
   if (!j?.funnet) { body('js', `<div class="pill">Ikke tilgjengelig</div>`); dot('js','empty'); return; }
+  const farge = n => n >= 4 ? 'r' : n >= 2 ? 'a3' : '';
   const niva = j.aktsomhetsniva;
-  const cls = niva >= 4 ? 'r' : niva >= 3 ? 'a3' : niva >= 2 ? 'a' : '';
+  const neste = j.neste;
   body('js',
-    f('Aktsomhetsnivå', j.tekst, cls) +
-    f('Dato', j.dato) +
-    (j.regionMatch ? `<div class="pill pill-green">Varsel for din region</div>` : `<div class="pill">Regionalt varsel</div>`)
+    f('Aktsomhetsnivå nå', j.tekst, farge(niva)) +
+    (niva >= 2 && j.hovedtekst ? f('Varsel', j.hovedtekst) : '') +
+    (j.dato ? f('Gjelder fra', j.dato) : '') +
+    (neste ? f('Neste døgn', neste.tekst + (neste.aktsomhetsniva >= 2 && neste.hovedtekst ? ` – ${neste.hovedtekst}` : ''), farge(neste.aktsomhetsniva)) : '') +
+    `<div class="pill pill-green">Varsel for kommunen</div>`
   );
-  dot('js', niva >= 3 ? 'warn' : 'ok');
+  dot('js', Math.max(niva, neste?.aktsomhetsniva ?? 0) >= 2 ? 'warn' : 'ok');
 }
 
 function visMeta(m) {
@@ -395,6 +470,9 @@ function visMeta(m) {
 }
 
 document.getElementById('inp').addEventListener('keydown', e => { if (e.key === 'Enter') sok(); });
+
+// Vekker API-et mens brukeren skriver inn adressen
+hentJsonFraApi('/helse').catch(() => {});
 </script>
 </body>
 </html>

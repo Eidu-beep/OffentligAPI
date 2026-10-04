@@ -25,7 +25,12 @@ export function hentCache(type, nokkel) {
 }
 
 export function settCache(type, nokkel, verdi) {
-  cache.set(`${type}:${nokkel}`, verdi, TTL[type] ?? 3600);
+  try {
+    cache.set(`${type}:${nokkel}`, verdi, TTL[type] ?? 3600);
+  } catch {
+    // node-cache kaster en feil når maxKeys er nådd. Da hopper vi over cachingen
+    // i stedet for å la hele oppslaget feile. Plass frigjøres når nøkler utløper.
+  }
 }
 
 export function cacheStatistikk() {

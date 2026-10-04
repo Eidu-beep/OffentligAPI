@@ -1,0 +1,16 @@
+# Avhengigheter
+node_modules/
+
+# Lokal database (inneholder API-nøkler) og hemmeligheter
+data/
+*.db
+*.db-wal
+*.db-shm
+.env
+.env.*
+!.env.example
+
+# Diverse
+npm-debug.log*
+.DS_Store
+Thumbs.db

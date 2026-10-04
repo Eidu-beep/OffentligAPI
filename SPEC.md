@@ -1,3 +1,5 @@
+> **Eldre dokument.** Deler av innholdet er utdatert. Gjeldende dokumentasjon ligger i `CLAUDE.md`.
+
 # Eiendomsdata — teknisk spec
 
 ## Overordnet

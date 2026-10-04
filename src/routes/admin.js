@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import {
   opprettNøkkel, listNøkler, settAktiv, slettNøkkel,
-  oppdaterGrense, brukHistorikk,
+  oppdaterGrense, brukHistorikk, paVolum,
 } from '../db.js';
 import { cacheStatistikk } from '../utils/cache.js';
 
@@ -25,6 +25,7 @@ router.get('/status', (_req, res) => {
     tidspunkt: new Date().toISOString(),
     oppetid_sek: Math.round(process.uptime()),
     minne_mb: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
+    persistentLagring: paVolum,   // false = nøklene slettes ved neste deploy
     cache: cacheStatistikk(),
   });
 });

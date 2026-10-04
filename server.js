@@ -12,6 +12,10 @@ migrerFraEnv();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Railway kjører appen bak én proxy. Uten dette ser alle forespørsler ut til å komme fra
+// samme IP, og grensen per IP ville i praksis gjelde alle brukere samlet.
+app.set('trust proxy', 1);
+
 const tillatteDomener = (process.env.ALLOWED_ORIGINS || '')
   .split(',')
   .map(s => s.trim())
@@ -19,12 +23,10 @@ const tillatteDomener = (process.env.ALLOWED_ORIGINS || '')
 
 app.use(helmet());
 app.use(cors({
+  // Ikke-tillatte domener får svar uten CORS-headere, så nettleseren blokkerer dem.
+  // (Å kaste en feil her ga 500 og en forvirrende feilmelding.)
   origin: (origin, callback) => {
-    if (!origin || tillatteDomener.length === 0 || tillatteDomener.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error(`CORS: ${origin} er ikke tillatt`));
-    }
+    callback(null, !origin || tillatteDomener.length === 0 || tillatteDomener.includes(origin));
   },
 }));
 app.use(express.json());
@@ -53,7 +55,10 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ feil: 'Intern serverfeil' });
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Eiendomsdata API kjører på port ${PORT}`);
   console.log(`Tillatte domener: ${tillatteDomener.join(', ') || 'alle (development)'}`);
 });
+
+// Eksporteres slik at testene (npm test) kan stoppe serveren når de er ferdige
+export { app, server };

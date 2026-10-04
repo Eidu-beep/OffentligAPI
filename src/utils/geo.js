@@ -27,3 +27,35 @@ export function rundetKoordinat(v, desimaler = 4) {
 export function koordinatNokkel(lat, lon) {
   return `${rundetKoordinat(lat)}:${rundetKoordinat(lon)}`;
 }
+
+// Offisiell UTM-sone (EUREF89) for en kommune, som EPSG-kode.
+// Sone 33 for Nordland (18) og Troms (55), sone 35 for Finnmark (56), sone 32 for resten.
+// Arealer beregnes i den offisielle sonen, slik at tallene stemmer med matrikkelen.
+export function utmEpsgForKommune(kommunenummer) {
+  const fylke = String(kommunenummer ?? '').padStart(4, '0').slice(0, 2);
+  if (fylke === '18' || fylke === '55') return 25833;
+  if (fylke === '56') return 25835;
+  return 25832;
+}
+
+function ringAreal(ring) {
+  let sum = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    sum += ring[j][0] * ring[i][1] - ring[i][0] * ring[j][1];
+  }
+  return Math.abs(sum) / 2;
+}
+
+// Areal i m² for en GeoJSON Polygon eller MultiPolygon i plane koordinater (meter).
+// Første ring i hver polygon er yttergrensen, resten er hull som trekkes fra.
+export function polygonAreal(geometri) {
+  if (!geometri?.coordinates) return 0;
+  const polygoner =
+    geometri.type === 'MultiPolygon' ? geometri.coordinates :
+    geometri.type === 'Polygon' ? [geometri.coordinates] : [];
+  let areal = 0;
+  for (const ringer of polygoner) {
+    ringer.forEach((ring, i) => { areal += (i === 0 ? 1 : -1) * ringAreal(ring); });
+  }
+  return Math.max(0, areal);
+}

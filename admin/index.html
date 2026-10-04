@@ -123,11 +123,33 @@ function toast(t) {
   setTimeout(() => el.classList.remove('vis'), 1800);
 }
 
+// API-et sover når det ikke er i bruk (Railway serverless), og det første kallet etter en pause
+// kan feile. Derfor vekkes API-et med den åpne helsesjekken før første kall, og på nytt hvis
+// siden har stått urørt en stund. Da sendes aldri en endring til et API som ikke er våkent.
+const VAKEN_MS = 4 * 60 * 1000;
+let sistKontakt = 0;
+let vekker = null;
+function vekkApi() {
+  if (Date.now() - sistKontakt < VAKEN_MS) return Promise.resolve();
+  vekker ??= (async () => {
+    for (let forsok = 1; forsok <= 4; forsok++) {
+      try {
+        const r = await fetch(`${API_URL}/helse`);
+        if (r.ok) { sistKontakt = Date.now(); return; }
+      } catch (e) { /* ikke våken ennå */ }
+      if (forsok < 4) await new Promise(ferdig => setTimeout(ferdig, 2500));
+    }
+  })().finally(() => { vekker = null; });
+  return vekker;
+}
+
 async function api(sti, opts = {}) {
+  await vekkApi();
   const r = await fetch(`${API_URL}/admin${sti}`, {
     ...opts,
     headers: { 'X-Admin-Key': adminKey, 'Content-Type': 'application/json', ...(opts.headers || {}) },
   });
+  sistKontakt = Date.now();
   if (!r.ok) {
     const d = await r.json().catch(() => ({}));
     throw new Error(d.feil || `HTTP ${r.status}`);
@@ -226,6 +248,9 @@ function kopier(t) {
 }
 
 document.getElementById('admin-key').addEventListener('keydown', e => { if (e.key === 'Enter') loggInn(); });
+
+// Vekker API-et mens admin-nøkkelen skrives inn
+vekkApi();
 </script>
 </body>
 </html>
