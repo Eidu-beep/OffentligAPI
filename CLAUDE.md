@@ -15,7 +15,7 @@ Lisenser, sjekket i Geonorges kartkatalog 2026-10-03:
 | Kartverket: adresser og eiendomsteiger | CC BY 4.0 |
 | NGU: løsmasser og berggrunn | NLOD 2.0 |
 | NVE: faresoner, flomsoner, aktsomhetskart og jordskredvarsel | NLOD 2.0 |
-| DiBK: reguleringsplaner | **Ikke åpne data** («Norge digitalt begrenset»), se åpent punkt 2 |
+| DiBK: reguleringsplaner | **Ikke åpne data** («Norge digitalt begrenset»), se åpent punkt 3 |
 
 De åpne lisensene krever kildehenvisning ("Kilde: Kartverket, NGU, NVE").
 
@@ -32,7 +32,7 @@ De åpne lisensene krever kildehenvisning ("Kilde: Kartverket, NGU, NVE").
 
 GitHub-repoet `Eidu-beep/OffentligAPI`, branch `main`. Arbeidsmappen skal være en klone av dette repoet (`Desktop\Eidu\OffentligAPI`). Eldre ZIP-filer fra chat (`eiendomsapi-v1` til `v6`) er utdaterte og inneholder plassholdere — ikke bruk dem.
 
-Endringene fra 2026-10-03 og 2026-10-04 ble committet og pushet 2026-10-04 med GitHub Desktop (commit `e9c3550`, «Retter datakildene og legger databasen på volum»). Samme dag ble demo-nøkkelen satt inn i `frontend/index.html` og pushet i en egen commit.
+Endringene fra 2026-10-03 og 2026-10-04 ble committet og pushet 2026-10-04 med GitHub Desktop (commit `e9c3550`, «Retter datakildene og legger databasen på volum»). Samme dag ble demo-nøkkelen satt inn i `frontend/index.html` og pushet i en egen commit, og deretter rettelsen for «Deploy crashed»-e-postene (ryddig avslutning på SIGTERM).
 
 ## Arkitektur
 
@@ -46,9 +46,15 @@ Tre deler. API-et og demo-siden bygges fra dette repoet, admin-siden fra et eget
 
 Hver push til `main` trigger ny deploy på Railway og av demo-siden — også endringer som bare gjelder `frontend/` eller `admin/`.
 
-Admin-siden deployes **ikke** av en push hit. Netlify bygger den fra repoet `Eidu-beep/igelkott` (sjekket i Netlify 2026-10-04). Mappen `admin/` i dette repoet er en kopi. Den publiserte admin-siden er lik `admin/index.html` slik filen var før 2026-10-04, så endringen fra 2026-10-04 (siden vekker API-et) er ikke publisert. Se åpent punkt 3.
+Admin-siden deployes **ikke** av en push hit. Netlify bygger den fra repoet `Eidu-beep/igelkott` (sjekket i Netlify 2026-10-04). Mappen `admin/` i dette repoet er en kopi. Den publiserte admin-siden er lik `admin/index.html` slik filen var før 2026-10-04, så endringen fra 2026-10-04 (siden vekker API-et) er ikke publisert. Se åpent punkt 4.
+
+Netlify-innstillinger (lest 2026-10-04): begge sidene har Base directory `/`, ingen Build command, Production branch `main` og Node 22.x. Publish directory er `frontend` for demo-siden og `admin` for admin-siden.
 
 Samle endringer i få pusher. Netlify-kontoen har gratisplanen med 300 kreditter per måned (perioden starter den 26.), og hver produksjonsdeploy koster 15 kreditter. Pushen 2026-10-04 kostet 15, og 285 var igjen etterpå. Når kredittene er brukt opp, settes begge sidene på pause til neste periode. Forbruket står under **Usage & billing** i Netlify.
+
+### Gjenopprettingsdokument
+
+`Desktop\Eidu\Eiendomsdata-API_oppsett_og_gjenoppretting.pdf` ligger utenfor repoet. Det beskriver API-ene som brukes, innstillingene hos Railway og Netlify, og hvordan alt settes opp igjen. Laget 2026-10-04 på brukerens forespørsel. Det er en PDF fordi PC-en ikke har Word. Lag en ny utgave når oppsettet endres. Dokumentet skal ikke inneholde nøkler eller passord.
 
 ### Railway
 
@@ -61,13 +67,15 @@ Planen er **Free** (valgt av brukeren 2026-10-04, etter at prøveperioden utløp
 - $1 i bruk per måned, som ikke overføres til neste måned. Minne koster $10 per GB per måned, CPU $20 per vCPU per måned og volum $0,15 per GB per måned. Når kreditten er brukt opp, stopper Railway tjenesten.
 - Grenser per tjeneste: 0,5 GB minne, 1 vCPU og 0,5 GB volum.
 - Regionbytte og eget domene krever betalt plan. Tjenesten blir derfor stående i US West.
+- Volumet har ingen sikkerhetskopi. Backups krever Pro-plan. Går databasen tapt, kan de samme nøklene legges inn igjen med variabelen `API_KEYS` (`nøkkel:kundenavn:dagliggrense`, komma mellom), som leses når databasen er tom. Testet lokalt 2026-10-04. Brukeren er bedt om å ta vare på en liste over nøklene utenfor repoet.
 - **Serverless** er slått på (Settings → Deploy). Containeren sovner etter 5–10 minutter uten trafikk og våkner på neste kall. Tjenesten kjører da bare når den er i bruk, og det reduserer forbruket. Ulempen står under «Kjente feller».
-- Anslag fra en lokal måling: våken bruker tjenesten rundt 135 MB minne (Node-prosessen rundt 70 MB og `npm start` rundt 65 MB). Sto den på hele måneden, ville det kostet omtrent $1,35, altså mer enn kreditten. $1 rekker derfor bare så lenge tjenesten sover det meste av tiden. Faktisk forbruk står under **Usage** i Railway.
+- Custom Start Command er `node server.js` (satt 2026-10-04, Settings → Deploy). Før det startet Railway tjenesten med `npm run start`, og da lå `npm` i minnet i tillegg. Startkommandoen må stå slik, ellers melder Railway hver erstattet deploy som krasjet. Se «Kjente feller».
+- Anslag fra en lokal måling: Node-prosessen bruker rundt 70 MB våken, og `npm` brukte rundt 65 MB til. Med 70 MB ville en tjeneste som sto på hele måneden kostet omtrent $0,70 i minne, mot omtrent $1,35 før. Det er ikke målt i Railway. Faktisk forbruk står under **Metrics** og **Usage** der.
 
 ## Mappestruktur
 
 ```
-server.js                      Inngangspunkt: helmet, CORS, rate limit, ruter
+server.js                      Inngangspunkt: helmet, CORS, rate limit, ruter, ryddig avslutning på SIGTERM
 package.json                   "type": "module" er påkrevd. Node 22. `npm test` kjører testene
 .gitignore                     Holder node_modules, lokal database og .env ute av repoet
 src/db.js                      SQLite (better-sqlite3): tabellene nøkler og bruk. Legger databasen på volumet
@@ -122,11 +130,11 @@ Verdiene ligger i Railway og skal aldri skrives inn i repoet. Åpne aldri «Raw 
 - `ALLOWED_ORIGINS` — kommaseparerte, eksakte domener, f.eks. `https://offentligapi.netlify.app,https://igelkott.netlify.app`. `*` virker ikke.
 - `ADMIN_KEY` — passordet til admin-siden
 - `CACHE_MAX_KEYS=10000`
-- `API_KEYS` — valgfri. Format `nøkkel:kundenavn:dagliggrense`. Legges inn i databasen kun når databasen er tom. Skal ikke være satt i produksjon, se åpent punkt 1.
+- `API_KEYS` — valgfri. Format `nøkkel:kundenavn:dagliggrense`. Legges inn i databasen kun når databasen er tom. Skal ikke være satt i produksjon. Brukeren fjernet den 2026-10-04.
 - `DB_PATH` — valgfri. Når et volum er koblet til tjenesten, legges databasen automatisk på volumet. Settes `DB_PATH`, må den peke inn i mappen volumet er montert på.
-- `PLAN_AKTIV` — settes til `true` for å slå på reguleringsplan. Ikke gjør det før lisensen er avklart (åpent punkt 2).
+- `PLAN_AKTIV` — settes til `true` for å slå på reguleringsplan. Ikke gjør det før lisensen er avklart (åpent punkt 3).
 
-Satt per 2026-10-03: `ADMIN_KEY`, `ALLOWED_ORIGINS`, `API_KEYS`, `CACHE_MAX_KEYS`, `NODE_ENV`. Ikke satt: `DB_PATH`, `PLAN_AKTIV`. Railway setter selv `RAILWAY_VOLUME_MOUNT_PATH` når et volum er koblet til, og `src/db.js` bruker den.
+Satt per 2026-10-04: `ADMIN_KEY`, `ALLOWED_ORIGINS`, `CACHE_MAX_KEYS`, `NODE_ENV`. Ikke satt: `API_KEYS`, `DB_PATH`, `PLAN_AKTIV`. Railway setter selv `RAILWAY_VOLUME_MOUNT_PATH` når et volum er koblet til, og `src/db.js` bruker den.
 
 ## Status per datakilde
 
@@ -141,7 +149,7 @@ Alt under er testet 2026-10-03 med reelle kall mot tjenestene, med den samme kod
 | Flomsone (NVE) | Fikset | `Flomsoner2` og `Flomaktsomhet` på samme sted |
 | Løsmasser (NGU) | Fikset | `geo.ngu.no/mapserver/LosmasserWMS2`, lag `Losmasse_flate`, GML |
 | Berggrunn (NGU) | Fikset | `geo.ngu.no/mapserver/BerggrunnWMS3`, lagene `Berggrunn_regional_hovedbergarter` og `Berggrunn_nasjonal_hovedbergarter`, GML |
-| Reguleringsplan | Virker, men slått av | `nap.ft.dibk.no/services/wms/reguleringsplaner/`, lagene `rpomrade_vn2` og `bebyggelseomrade_vn2`. Ikke åpne data (åpent punkt 2). Ikke alle kommuner er med, Oslo mangler |
+| Reguleringsplan | Virker, men slått av | `nap.ft.dibk.no/services/wms/reguleringsplaner/`, lagene `rpomrade_vn2` og `bebyggelseomrade_vn2`. Ikke åpne data (åpent punkt 3). Ikke alle kommuner er med, Oslo mangler |
 | Jordskredvarsel (NVE) | Fikset | `api01.nve.no/hydrology/forecast/landslide/v1.0.10/api/Warning/Municipality/{kommunenr}/1/{fra}/{til}` |
 
 ### Testadresser med kjent svar (2026-10-03, bekreftet gjennom det deployede API-et 2026-10-04)
@@ -155,29 +163,30 @@ Alt under er testet 2026-10-03 med reelle kall mot tjenestene, med den samme kod
 
 ## Åpne punkter, i prioritert rekkefølge
 
-### 1. Nøkler og hemmeligheter
+Gjort 2026-10-04: brukeren har slettet `API_KEYS` i Railway (kontrollert på variabelnavnene), byttet `ADMIN_KEY` og slettet den gamle testnøkkelen på admin-siden. Railway deployet på nytt kl. 14.42. Loggen viste databasen på volumet uten ny nøkkelmigrering, og demo-siden ga treff etterpå. Ingenting haster nå.
 
-Dette må brukeren gjøre selv, fordi det krever `ADMIN_KEY`, som en AI-økt ikke skal skrive inn. Per 2026-10-04 kl. 14 var det ikke gjort i Railway (ingen ny deploy etter variabelendring):
+### 1. Avklar drift før betalende kunder
 
-1. På admin-siden (`https://igelkott.netlify.app`): slett nøkkelen som variabelen `API_KEYS` la inn. Bare «Demo-nettside» og eventuelle kundenøkler skal stå igjen. Står det «Feil admin-nøkkel eller API utilgjengelig» ved innlogging, sover API-et: vent noen sekunder og prøv igjen.
-2. I Railway → tjenesten `OffentligAPI` → **Variables**: slett `API_KEYS`, og bytt verdien i `ADMIN_KEY`. Den gamle admin-nøkkelen ble vist i en AI-økt 2026-10-03. Railway deployer på nytt.
-3. Logg inn på admin-siden igjen med den nye admin-nøkkelen, og se at demo-nøkkelen står der.
+Free-planen holder til demo, men har tre svakheter for kunder: tjenesten sover og første kall etter en pause kan feile, kreditten på $1 kan ta slutt, og tjenesten står i US West. Detaljene står under «Railway» i Arkitektur. Brukeren må velge selv:
 
-Ellers:
+- Bli på Free. Startkommandoen er satt til `node server.js`, så kreditten rekker lenger enn før. Følg med på **Usage** i Railway den første måneden.
+- Gå til Hobby (fra $5 per måned). Da kan tjenesten flyttes til EU West (Amsterdam) under Settings → Scale → Regions, og Serverless kan slås av.
 
-- Demo-nøkkelen i `API_KEY` i `frontend/index.html` ble opprettet på admin-siden 2026-10-04. Den står i klartekst i offentlig kode, og skal derfor ha en daglig grense (brukeren ble bedt om 200). Brukerens egen nettside skal ha en separat nøkkel som ikke ligger i offentlig kode.
+### 2. Nøkler og repo
+
+- Brukerens egen nettside skal ha en separat nøkkel som ikke ligger i offentlig kode.
+- Demo-nøkkelen i `API_KEY` i `frontend/index.html` ble opprettet på admin-siden 2026-10-04. Den står i klartekst i offentlig kode, og skal derfor ha en daglig grense (brukeren ble bedt om 200).
 - Gjør repoet privat. Railway og Netlify fungerer med private repoer.
 
-### 2. Reguleringsplan: avklar lisensen
+### 3. Reguleringsplan: avklar lisensen
 
 De nasjonale plandataene er merket «Norge digitalt begrenset» med Norge digitalt-lisens i Geonorge. De er altså ikke åpne data, og kan trolig ikke selges videre i et kommersielt API uten avtale. Brukeren må avklare dette med DiBK eller Kartverket. Koden virker, og slås på med `PLAN_AKTIV=true`. Til da viser kortet «Ikke tilgjengelig».
 
-### 3. Forbedringer (lavere prioritet)
+### 4. Forbedringer (lavere prioritet)
 
 - Faresoner og flomsoner slås opp for adressepunktet. Et oppslag mot hele teigen ville fanget tomter der bare en del ligger i en sone. Teiggrensene hentes allerede i `teig.js`.
 - Watch Paths i Railway, slik at endringer kun i `frontend/` eller `admin/` ikke redeployer API-et.
 - Healthcheck Path `/helse` i Railway (Settings → Deploy), slik at en deploy som ikke starter ikke tar over.
-- Custom Start Command `node server.js` i Railway (Settings → Deploy). Da slipper tjenesten minnet til `npm start`, omtrent halvparten av forbruket.
 - Admin-siden kan vise en advarsel når `/admin/status` sier `persistentLagring: false`.
 - Admin-siden: velg én kilde. Enten kobles Netlify-siden `igelkott` til dette repoet med `admin` som mappe (da koster hver push 30 kreditter), eller så kopieres endringer i `admin/index.html` over til repoet `Eidu-beep/igelkott`.
 - Netlify: la demo-siden bare deployes når `frontend/` er endret (Base directory eller en ignore-regel). Da koster en push som bare gjelder API-et ingen kreditter.
@@ -211,6 +220,7 @@ Dette er metoden som løste alle kortene.
 - Railway bygger med Railpack, som forenkler `engines.node` til hovedversjonen. `>=22.0.0` gir nyeste Node 22.
 - API-et sover når det ikke er i bruk (Serverless på Railway). Målt 2026-10-04 fra nettleser: det første kallet etter en pause tok 1,2 sekunder, mot 0,2 ellers. Fra en ekstern tjeneste ga det første kallet etter en pause 404 begge gangene det ble prøvd, og neste kall noen sekunder senere ga 200. Railway advarer selv om at det første kallet kan gi 502. Railways feilsvar har ikke CORS-headere, så i nettleseren blir det en avvist `fetch`. Demo-siden kaller derfor `/helse` når den lastes, og gjør inntil fire forsøk på et oppslag når svaret ikke er JSON eller `fetch` blir avvist. `admin/index.html` her gjør tilsvarende, men er ikke publisert (se Arkitektur): feiler innloggingen på admin-siden første gang, prøv igjen etter noen sekunder. Kunder som kaller API-et direkte, må selv prøve på nytt.
 - In-memory-cachen tømmes hver gang containeren sovner eller deployes.
+- «Deploy crashed»-e-post fra Railway ved hver deploy. Railway stopper den gamle deployen med SIGTERM og melder krasj hvis prosessen ikke avslutter med kode 0 eller 143. Med `npm run start` avslutter `npm` med kode 1 («npm error signal SIGTERM»). Med `node server.js` uten egen håndtering overser Node signalet, fordi den er hovedprosess i containeren, og blir tvangsavsluttet. Begge deler ble gjenskapt lokalt 2026-10-04. Løsningen er to ting sammen: Custom Start Command `node server.js` i Railway, og SIGTERM-håndteringen nederst i `server.js`, som avslutter med kode 0. `test/avslutning.test.js` tester det. Krasjmeldingene 2026-10-04 kom alle i det en aktiv deploy ble erstattet, ikke når tjenesten sovnet.
 - En ny, tom database får nøklene fra `API_KEYS` lagt inn ved første oppstart. Volumet var tomt 2026-10-04, så det skjedde da.
 - Skjermbilder og klikk i brukerens Chrome feiler når Chrome-vinduet er skjult eller minimert. Les da siden med JavaScript i stedet.
 - Når en AI-økt skal styre GitHub Desktop, må både «GitHub Desktop» og prosessen `githubdesktop.exe` godkjennes. Vinduet eies av den siste.

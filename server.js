@@ -5,7 +5,7 @@ import eiendomRuter from './src/routes/eiendom.js';
 import adminRuter from './src/routes/admin.js';
 import { perIpLimiter, globalLimiter } from './src/middleware/rateLimiter.js';
 import { sjekkApiNøkkel } from './src/middleware/apiNokkel.js';
-import { migrerFraEnv } from './src/db.js';
+import db, { migrerFraEnv } from './src/db.js';
 
 migrerFraEnv();
 
@@ -59,6 +59,25 @@ const server = app.listen(PORT, () => {
   console.log(`Eiendomsdata API kjører på port ${PORT}`);
   console.log(`Tillatte domener: ${tillatteDomener.join(', ') || 'alle (development)'}`);
 });
+
+// Railway stopper containeren med SIGTERM når en ny deploy tar over, og når tjenesten legges i dvale.
+// Node kjører som hovedprosess i containeren, og en hovedprosess uten egen håndtering overser SIGTERM.
+// Da blir den tvangsavsluttet, og Railway melder deployen som krasjet. Derfor avslutter vi selv, med kode 0.
+let avslutter = false;
+function avslutt(signal) {
+  if (avslutter) return;
+  avslutter = true;
+  console.log(`${signal} mottatt, avslutter`);
+  const ferdig = () => {
+    try { db.close(); } catch { /* databasen er allerede lukket */ }
+    process.exit(0);
+  };
+  server.close(ferdig);
+  // Et oppslag som fortsatt pågår, kan holde serveren åpen. Vent ikke lenger enn to sekunder.
+  setTimeout(ferdig, 2000).unref();
+}
+process.on('SIGTERM', () => avslutt('SIGTERM'));
+process.on('SIGINT', () => avslutt('SIGINT'));
 
 // Eksporteres slik at testene (npm test) kan stoppe serveren når de er ferdige
 export { app, server };
