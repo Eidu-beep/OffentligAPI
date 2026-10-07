@@ -2,7 +2,7 @@
 
 Les hele denne filen før du gjør noe. Den beskriver prosjektet, gjeldende tilstand, kjente feller og hva som skal gjøres videre. Oppdater filen når status endrer seg.
 
-Sist oppdatert: 2026-10-04.
+Sist oppdatert: 2026-10-07.
 
 ## Prosjektet
 
@@ -34,6 +34,8 @@ GitHub-repoet `Eidu-beep/OffentligAPI`, branch `main`. Arbeidsmappen skal være 
 
 Endringene fra 2026-10-03 og 2026-10-04 ble committet og pushet 2026-10-04 med GitHub Desktop (commit `e9c3550`, «Retter datakildene og legger databasen på volum»). Samme dag ble demo-nøkkelen satt inn i `frontend/index.html` og pushet i en egen commit, og deretter rettelsen for «Deploy crashed»-e-postene (ryddig avslutning på SIGTERM).
 
+2026-10-07 kom adressevalget: forslag fra Kartverkets adresseregister på demo-siden, og et API som ikke gjetter når en adresse finnes flere steder. Se «Adresseoppslag». Endringen ble levert til arbeidsmappen 2026-10-07.
+
 ## Arkitektur
 
 Tre deler. API-et og demo-siden bygges fra dette repoet, admin-siden fra et eget:
@@ -45,6 +47,8 @@ Tre deler. API-et og demo-siden bygges fra dette repoet, admin-siden fra et eget
 | Admin ("igelkott") | Netlify — `https://igelkott.netlify.app` | repoet `Eidu-beep/igelkott` | Opprette og administrere API-nøkler |
 
 Hver push til `main` trigger ny deploy på Railway og av demo-siden — også endringer som bare gjelder `frontend/` eller `admin/`.
+
+Demo-siden kaller to steder fra nettleseren: API-et vårt (med demo-nøkkelen), og Kartverkets adresse-API direkte for forslagene i søkefeltet. Det siste er åpent, krever ingen nøkkel og svarer med `access-control-allow-origin: *`. Forslagene bruker derfor ikke av demo-nøkkelens daglige grense.
 
 Admin-siden deployes **ikke** av en push hit. Netlify bygger den fra repoet `Eidu-beep/igelkott` (sjekket i Netlify 2026-10-04). Mappen `admin/` i dette repoet er en kopi. Den publiserte admin-siden er lik `admin/index.html` slik filen var før 2026-10-04, så endringen fra 2026-10-04 (siden vekker API-et) er ikke publisert. Se åpent punkt 4.
 
@@ -81,9 +85,9 @@ package.json                   "type": "module" er påkrevd. Node 22. `npm test`
 src/db.js                      SQLite (better-sqlite3): tabellene nøkler og bruk. Legger databasen på volumet
 src/middleware/apiNokkel.js    Sjekker X-Api-Key mot databasen og teller bruk
 src/middleware/rateLimiter.js  60 kall/min per IP, 500/min globalt
-src/routes/eiendom.js          GET /eiendom?adresse=...  (krever API-nøkkel)
+src/routes/eiendom.js          GET /eiendom?adresse=...  (krever API-nøkkel). Kontrollerer parametrene
 src/routes/admin.js            /admin/*  (krever X-Admin-Key)
-src/services/adresse.js        Kartverket adresse-API (JSON)
+src/services/adresse.js        Kartverket adresse-API (JSON). Finner adressen, og avgjør om den er entydig
 src/services/teig.js           Kartverkets eiendoms-API (JSON): teigene til matrikkelnummeret, areal
 src/services/plan.js           Reguleringsplan (DiBK, WMS GetFeatureInfo som JSON). Slått av som standard
 src/services/ngu.js            NGU løsmasser og berggrunn (WMS GetFeatureInfo som GML)
@@ -93,7 +97,8 @@ src/utils/cache.js             In-memory cache med TTL per kilde
 src/utils/geo.js               WGS84 → UTM33, arealberegning, offisiell UTM-sone per fylke
 test/                          Tester. Kjører uten nettverk mot etterlignede kilder
 testdata/svar.js               Svar fra de ekte tjenestene, brukt av testene
-frontend/index.html            Demo-nettside (har API_URL og API_KEY øverst i <script>). Vekker API-et når siden lastes
+testdata/adresseregister.js    Et lite adresseregister som søker slik Kartverkets adresse-API gjør, brukt av testene
+frontend/index.html            Demo-nettside (har API_URL og API_KEY øverst i <script>). Adresseforslag fra Kartverket. Vekker API-et når siden lastes
 admin/index.html               Kopi av admin-nettsiden (har API_URL øverst i <script>). Den publiserte siden bygges fra repoet igelkott
 README.md, SPEC.md, STEG2.md   Eldre dokumenter. Denne filen gjelder der de sier noe annet
 ```
@@ -101,7 +106,7 @@ README.md, SPEC.md, STEG2.md   Eldre dokumenter. Denne filen gjelder der de sier
 ## Endepunkter
 
 - `GET /helse` — åpen helsesjekk
-- `GET /eiendom?adresse=...` — krever header `X-Api-Key` (eller `?api_key=`)
+- `GET /eiendom?adresse=...` — krever header `X-Api-Key` (eller `?api_key=`). Valgfrie `postnummer` og `kommunenummer` (fire siffer) avgrenser adressesøket. Se «Adresseoppslag»
 - Admin, alle med header `X-Admin-Key`: `GET /admin/status`, `GET /admin/nokler`, `POST /admin/nokler`, `PATCH /admin/nokler/:nokkel/aktiv`, `PATCH /admin/nokler/:nokkel/grense`, `DELETE /admin/nokler/:nokkel`, `GET /admin/nokler/:nokkel/historikk`
 
 `/admin/status` har feltet `persistentLagring`. `false` betyr at databasen ikke ligger på et volum, og at nøklene slettes ved neste deploy.
@@ -121,6 +126,44 @@ Alle blokkene har `funnet`. `feil: true` betyr at kilden ikke svarte — det er 
 `skredfare` og `flomsone` kan ha `ufullstendig: true` og `mangler: [...]` når en av delkildene ikke svarte.
 
 Viktig for kundene: «ikke i faresone» betyr bare trygt der `kartlagt` er `true`. Ellers er det aktsomhetskartene som sier om det kan være fare. Oppslaget gjelder adressepunktet (± 1 meter), ikke hele tomten.
+
+## Adresseoppslag
+
+Bygd 2026-10-07 etter ønske fra brukeren: samme adresse finnes ofte flere steder, og oppslaget skal gjelde en adresse som finnes. Kilden er Kartverkets adresse-API, som søker i matrikkelens adresser (det offisielle registeret, CC BY 4.0, åpent uten nøkkel). Hele registeret kan også lastes ned («Matrikkelen - Adresse» i Geonorge), men det trengs ikke.
+
+**API-et gjetter aldri.** Reglene står i `src/services/adresse.js`:
+
+- 200: nøyaktig én adresse passer. `meta.adresse` er adresseteksten slik den står i registeret, også med tilleggsnavn («Torvet, Storgata 8A») og for matrikkeladresser («Flaga, 12/5»).
+- 400 med `kandidater`: adressen finnes flere steder. `antall` er med når registeret har gitt alle treffene.
+- 404: adressen finnes ikke slik den er skrevet. `kandidater` har adresser som ligner, når det finnes noen (annen bokstav, skrivefeil, samme adresse et annet sted).
+- 400 uten `kandidater`: en parameter mangler eller er ugyldig. `adresse` kan ha høyst 200 tegn og må ha minst én bokstav eller ett tall.
+
+Hva «passer» betyr: teksten må være adressen, eventuelt fulgt av adressens eget postnummer, poststed eller kommunenavn. Store og små bokstaver, komma, punktum og bindestrek spiller ingen rolle. Stedet må være hele navnet: «Rana» og «Mo i Rana» passer for 8610 MO I RANA i Rana kommune, «Mo» gjør det ikke. «Kristiansund» passer for poststedet KRISTIANSUND N fordi kommunen heter det. Ordene «i», «kommune», «Norge» og «Norway» etter adressen hoppes over. «Storgaten» er ikke «Storgata»: da svarer API-et 404 med Storgata som kandidat.
+
+«Myrveien 4 i Bergen» kan bety husnummer 4 i Bergen, eller husnummer 4I. Begge lesemåtene prøves (`lesemaater`), og finnes begge adressene, er svaret 400.
+
+Slik søkes det:
+
+1. Tekst som er gate og husnummer søkes felt for felt i hele landet (`adressenavn`, `nummer`, `bokstav`), med inntil 1000 treff, og stedet kontrolleres i koden etterpå. Da må husnummeret være husnummeret. Det er ett kall for de aller fleste oppslag.
+2. Passer ingen, prøves fritekstsøk (teksten kan være delt feil, som «Gate 5 10» i Måløy, der gata heter «Gate 5») og et søk som tåler skrivefeil (`fuzzy=true`). Det siste brukes bare til forslag.
+3. Annen tekst (matrikkeladresser, og tekst uten husnummer) søkes som fritekst og som `adressetekst`, med inntil 100 treff hver.
+
+Kjente begrensninger: en matrikkeladresse skrevet med sted i teksten («12/5 Voss») finnes bare når den er blant de hundre første treffene i fritekstsøket. Med `postnummer` og `kommunenummer` som parametre gjelder ikke det. En adresse som fantes over 1000 steder, ville gitt 400 selv med stedet i teksten. De vanligste som ble prøvd (Storgata 1, Ringveien 1, Kirkeveien 1) ga rundt 50 treff.
+
+Dette er kontrollert mot det ekte registeret 2026-10-07. Kartverkets søk er romsligere enn det ser ut til, og derfor kontrolleres hvert treff i koden:
+
+- `sok` krever at alle ordene finnes, men i hvilket som helst felt. «storgata 1 elverum» gir også Storgata 12, der bruksnummeret er 1. «Storgata 619, Oslo» gir Storgata 1, som har bruksnummer 619.
+- `adressenavn` treffer andre former og lengre navn: «storgata» gir også Storgaten, Nedre Storgate og Gamle Storgate.
+- `kommunenavn` og `poststed` treffer når ett av ordene passer («oslo bergen moss» ga Storgata 1 i både Oslo og Moss). De brukes derfor ikke.
+- `bokstav=` uten verdi gir bare adresser uten bokstav. `nummer` må være et heltall, ellers svarer registeret 400. Tomt `sok` gir også 400.
+- Rekkefølgen på treffene er ikke til å stole på. Eksakte treff står oftest først, men ikke alltid.
+- `treffPerSide` kan være høyst 1000. `totaltAntallTreff` stopper på 10 000. `filtrer` velger felt, også `adresser.representasjonspunkt`.
+- «St.Croix gate» er ett ord i registeret. Bindestrek deler ord, komma uten mellomrom gjør det ikke («1,oslo» gir ingen treff).
+- Samme adressetekst kan finnes to ganger i én kommune: Storgata 1 i Vågan ligger både i 8300 Svolvær og 8310 Kabelvåg. Bare postnummeret skiller dem. «Storgata 1» finnes 44 steder i landet.
+
+**Demo-siden** (`frontend/index.html`): mens brukeren skriver, hentes forslag rett fra Kartverket (`sok` med stjerne på det siste ordet, 30 treff, åtte vises, de som teksten begynner med står først). Et valgt forslag slås opp med `adresse`, `postnummer` og `kommunenummer`. Trykker brukeren Enter eller «Hent data» uten å velge, avgjør API-et: én adresse gir data, og ellers vises kandidatene fra API-et som en liste å velge fra. Tekst uten tall er ikke en hel adresse. Da vises forslagslisten med beskjed om å velge, uten kall til API-et, så lenge registeret har forslag. Siden slår aldri opp en adresse brukeren verken har skrevet nøyaktig eller valgt. Svarer ikke Kartverket i nettleseren, virker siden fortsatt: det som er skrevet, sendes til API-et.
+
+Kunder som vil ha forslag i sitt eget søkefelt, kan kalle Kartverkets adresse-API på samme måte. `README.md` beskriver parametrene og svarene.
 
 ## Miljøvariabler i Railway
 
@@ -142,7 +185,7 @@ Alt under er testet 2026-10-03 med reelle kall mot tjenestene, med den samme kod
 
 | Kort | Status | Kilde og kommentar |
 |---|---|---|
-| Adresse / Matrikkel | Fungerer | `ws.geonorge.no/adresser/v1/sok` |
+| Adresse / Matrikkel | Fungerer. Entydig oppslag fra 2026-10-07 | `ws.geonorge.no/adresser/v1/sok`. Se «Adresseoppslag» |
 | Kart | Fungerer | OpenStreetMap-iframe |
 | Eiendomsteig | Fikset | `ws.geonorge.no/eiendom/v1/geokoding` med `omrade=true`. Slår opp teigene til adressens matrikkelnummer og regner areal fra teiggrensene. Det gamle WFS-oppslaget svarte 500 hos Kartverket, og tok dessuten «første teig i nærheten» |
 | Skredfare (NVE) | Fikset | `kart.nve.no/enterprise/rest/services`: `Skredfaresoner3`, `SkredKvikkleire2`, `SnoskredAktsomhet`, `SkredSteinAktR`, `JordFlomskredAktsomhet`, `KvikkleireskredAktsomhet`. Den gamle adressen (`KastWMTS`) var en stoppet tjeneste, og feilen ble vist som grønt |
@@ -160,6 +203,16 @@ Alt under er testet 2026-10-03 med reelle kall mot tjenestene, med den samme kod
 - Kvikkleiresone: punktet 63.38099, 10.152514 i Trondheim (sonen Hafella, faregrad høy)
 - Ingen treff: Storgata 1, Oslo (teig 208/619, 790 m², fyllmasse, leirskifer)
 - Reguleringsplan: Torvet i Trondheim (63.4305, 10.3951) gir Midtbyplanen
+
+Adresseoppslag, kontrollert mot det ekte registeret 2026-10-07 med koden i `src/`:
+
+- `Storgata 1` gir 400 med 44 treff. `Storgata 1, Oslo` gir 0155 OSLO.
+- `Storgata 1, Vågan` gir 400 med to kandidater (8300 SVOLVÆR og 8310 KABELVÅG). Med `postnummer=8310` gir den Kabelvåg.
+- `Storgata 12B, Oslo`, `Storgaten 1, Oslo` og `Markveien 1, Oslo` gir 404 med kandidater (Storgata 12, Storgata 1, Markveien 1A–1C).
+- `Storgata 619, Oslo` gir 404 uten kandidater. 619 er bruksnummeret til Storgata 1.
+- `Storgata 8A, Kragerø` gir `Torvet, Storgata 8A`. `Flaga, 12/5` gir matrikkeladressen på Voss, og `12/5` alene gir 400.
+- `Tamburbakken 17 I, Drøbak` gir 17I. `Storgata 1 i Oslo` gir Storgata 1.
+- `Pir I 2, Trondheim` og `Gate 5 10, Måløy` gir treff, selv om navnet inneholder «I» og et tall.
 
 ## Åpne punkter, i prioritert rekkefølge
 
@@ -191,6 +244,8 @@ De nasjonale plandataene er merket «Norge digitalt begrenset» med Norge digita
 - Admin-siden: velg én kilde. Enten kobles Netlify-siden `igelkott` til dette repoet med `admin` som mappe (da koster hver push 30 kreditter), eller så kopieres endringer i `admin/index.html` over til repoet `Eidu-beep/igelkott`.
 - Netlify: la demo-siden bare deployes når `frontend/` er endret (Base directory eller en ignore-regel). Da koster en push som bare gjelder API-et ingen kreditter.
 - En betalt Railway-plan (Hobby, fra $5 per måned) gir regionbytte til EU West (Amsterdam), eget domene og mulighet til å la tjenesten stå på hele tiden. Brukerne og datakildene er i Norge, og hvert oppslag går nå via California.
+- `?api_key=` oppgitt to ganger gir 500 i stedet for 401 (`src/middleware/apiNokkel.js` sender en tabell til databasen). Serveren stopper ikke av det.
+- Adresseoppslaget godtar ikke andre former av gatenavnet («Storgaten» for «Storgata», «Kirkevegen» for «Kirkeveien»), men foreslår dem. Vil kundene heller ha treff, kan former som bare skiller seg på -gata/-gaten og -veien/-vegen godtas når nøyaktig én adresse passer. Det er et valg brukeren må ta: det er trygt i de fleste tilfeller, men «Storgate 10, Drammen» viser at det kan bli feil (Øvre Storgate, Nedre Storgate og Storgaten i Svelvik ligger alle i Drammen kommune).
 
 ## Metode for å fikse en datakilde
 
@@ -220,8 +275,13 @@ Dette er metoden som løste alle kortene.
 - Railway bygger med Railpack, som forenkler `engines.node` til hovedversjonen. `>=22.0.0` gir nyeste Node 22.
 - API-et sover når det ikke er i bruk (Serverless på Railway). Målt 2026-10-04 fra nettleser: det første kallet etter en pause tok 1,2 sekunder, mot 0,2 ellers. Fra en ekstern tjeneste ga det første kallet etter en pause 404 begge gangene det ble prøvd, og neste kall noen sekunder senere ga 200. Railway advarer selv om at det første kallet kan gi 502. Railways feilsvar har ikke CORS-headere, så i nettleseren blir det en avvist `fetch`. Demo-siden kaller derfor `/helse` når den lastes, og gjør inntil fire forsøk på et oppslag når svaret ikke er JSON eller `fetch` blir avvist. `admin/index.html` her gjør tilsvarende, men er ikke publisert (se Arkitektur): feiler innloggingen på admin-siden første gang, prøv igjen etter noen sekunder. Kunder som kaller API-et direkte, må selv prøve på nytt.
 - In-memory-cachen tømmes hver gang containeren sovner eller deployes.
-- «Deploy crashed»-e-post fra Railway ved hver deploy. Railway stopper den gamle deployen med SIGTERM og melder krasj hvis prosessen ikke avslutter med kode 0 eller 143. Med `npm run start` avslutter `npm` med kode 1 («npm error signal SIGTERM»). Med `node server.js` uten egen håndtering overser Node signalet, fordi den er hovedprosess i containeren, og blir tvangsavsluttet. Begge deler ble gjenskapt lokalt 2026-10-04. Løsningen er to ting sammen: Custom Start Command `node server.js` i Railway, og SIGTERM-håndteringen nederst i `server.js`, som avslutter med kode 0. `test/avslutning.test.js` tester det. Krasjmeldingene 2026-10-04 kom alle i det en aktiv deploy ble erstattet, ikke når tjenesten sovnet.
+- «Deploy crashed»-e-post fra Railway ved hver deploy. Railway stopper den gamle deployen med SIGTERM og melder krasj hvis prosessen ikke avslutter med kode 0 eller 143. Med `npm run start` avslutter `npm` med kode 1 («npm error signal SIGTERM»). Med `node server.js` uten egen håndtering overser Node signalet, fordi den er hovedprosess i containeren, og blir tvangsavsluttet. Begge deler ble gjenskapt lokalt 2026-10-04. Løsningen er to ting sammen: Custom Start Command `node server.js` i Railway, og SIGTERM-håndteringen nederst i `server.js`, som avslutter med kode 0. `test/avslutning.test.js` tester det. Krasjmeldingene 2026-10-04 kom alle i det en aktiv deploy ble erstattet, ikke når tjenesten sovnet. Kontrollert i Railway etter rettelsen: en aktiv deploy ble erstattet med Redeploy uten ny krasjmelding, og loggen viste `SIGTERM mottatt, avslutter` både da og når tjenesten sovnet. Krasjmeldingene står under bjelleikonet (Notifications) i Railway.
 - En ny, tom database får nøklene fra `API_KEYS` lagt inn ved første oppstart. Volumet var tomt 2026-10-04, så det skjedde da.
+- Express 4 fanger ikke feil fra asynkrone ruter. En feil der stopper hele Node-prosessen. Før 2026-10-07 gjorde `?adresse=a&adresse=b` nettopp det (Express gir en tabell når en parameter står to ganger, og `.trim()` feilet). Ruten i `src/routes/eiendom.js` kontrollerer nå typen, og er pakket inn slik at uventede feil gir 500 i stedet.
+- Testene i `test/api.test.js` sender `X-Forwarded-For` med en egen adresse per test. Uten det går de til sammen over grensen på 60 kall i minuttet per IP, og får 429.
+- Adressetekst må sammenlignes etter `normalize('NFC')`. En «å» kan komme som a + ring (to tegn), blant annet fra Mac.
+- Et regulært uttrykk som `/\.+$/` bruker kvadratisk tid på lange rekker av punktum. `ord()` i `adresse.js` fjerner derfor punktum med en løkke, og `adresse` er begrenset til 200 tegn.
+- Fra AI-øktens sky-miljø 2026-10-07 nådde `curl` alle kildene, mens `fetch` i Node ble avvist av nettverksfilteret. Reelle kall med koden i `src/` ble derfor kjørt med `fetch` byttet ut med et kall til `curl`.
 - Skjermbilder og klikk i brukerens Chrome feiler når Chrome-vinduet er skjult eller minimert. Les da siden med JavaScript i stedet.
 - Når en AI-økt skal styre GitHub Desktop, må både «GitHub Desktop» og prosessen `githubdesktop.exe` godkjennes. Vinduet eies av den siste.
 

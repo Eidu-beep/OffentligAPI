@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Eiendomsdata</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://ws.geonorge.no" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -33,7 +34,7 @@
   h1 { font-family: var(--serif); font-size: clamp(2rem,5vw,3rem); font-weight: 300; line-height: 1.1; margin-bottom: 6px; }
   h1 em { font-style: italic; color: var(--accent); }
   .subtitle { color: var(--muted); font-size: 12px; }
-  .search-wrap { display: flex; gap: 8px; margin-bottom: 12px; }
+  .search-wrap { display: flex; gap: 8px; margin-bottom: 12px; position: relative; }
   .search-input {
     flex: 1; background: var(--surface); border: 1px solid var(--border);
     border-radius: 6px; padding: 12px 16px; font-family: var(--mono);
@@ -50,6 +51,26 @@
   .search-btn:hover { opacity: .9; }
   .search-btn:active { transform: scale(.98); }
   .search-btn:disabled { opacity: .4; cursor: not-allowed; }
+  .search-input { min-width: 0; }
+  .forslag {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20;
+    background: var(--surface); border: 1px solid #3a3d48; border-radius: 6px;
+    box-shadow: 0 12px 32px rgba(0,0,0,.55); overflow: hidden;
+  }
+  .forslag[hidden] { display: none; }
+  .forslag-info { padding: 8px 14px; font-size: 11px; color: var(--muted); }
+  .forslag-info:empty { display: none; }
+  .forslag ul { list-style: none; max-height: 312px; overflow-y: auto; }
+  .forslag li {
+    display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 14px;
+    padding: 8px 14px; border-top: 1px solid var(--border); cursor: pointer;
+  }
+  .forslag-info:empty + ul li:first-child { border-top: none; }
+  .forslag li:hover, .forslag li[aria-selected="true"] { background: var(--surface2); }
+  .forslag li[aria-selected="true"] .f-adr { color: var(--accent); }
+  .f-adr { color: var(--text); }
+  .f-sted { color: var(--muted); font-size: 11px; }
+  .search-hint { color: var(--muted); font-size: 11px; margin: -4px 0 12px; }
   .examples { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 32px; }
   .examples span { font-size: 10px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; align-self: center; margin-right: 4px; }
   .ex-btn {
@@ -116,9 +137,16 @@
 </header>
 
 <div class="search-wrap">
-  <input class="search-input" id="inp" type="text" placeholder="Storgata 1, Oslo" autocomplete="off">
+  <input class="search-input" id="inp" type="text" placeholder="Storgata 1, 0155 Oslo" autocomplete="off"
+    autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="Adresse"
+    role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="forslag-liste">
   <button class="search-btn" id="btn" onclick="sok()">Hent data →</button>
+  <div class="forslag" id="forslag" hidden>
+    <div class="forslag-info" id="forslag-info" role="status"></div>
+    <ul id="forslag-liste" role="listbox" aria-label="Adresseforslag"></ul>
+  </div>
 </div>
+<p class="search-hint">Skriv adressen og velg riktig treff i listen. Forslagene kommer fra Kartverkets adresseregister.</p>
 
 <div class="examples">
   <span>eks:</span>
@@ -206,7 +234,7 @@
 const API_URL = 'https://offentligapi-production.up.railway.app';
 const API_KEY = 'ek_dd8abd614033aa18670b879ab3d8df5d4947e298512f1e07';
 
-function fyll(a) { document.getElementById('inp').value = a; sok(); }
+function fyll(a) { document.getElementById('inp').value = a; valgt = null; sok(); }
 function dot(id, s) { const el = document.getElementById('dot-' + id); if (el) el.className = 'dot ' + s; }
 function body(id, h) { const el = document.getElementById('body-' + id); if (el) el.innerHTML = h; }
 // Data fra eksterne kilder skal aldri tolkes som HTML
@@ -258,16 +286,221 @@ async function hentJsonFraApi(sti, valg = {}) {
   }
 }
 
+// ── Adressevalg ──────────────────────────────────────────────────────────────
+// Forslagene hentes rett fra Kartverkets adresseregister mens brukeren skriver (åpent API uten nøkkel).
+// En valgt adresse slås opp med postnummer og kommunenummer, for samme adresse kan finnes flere steder.
+// Skriver brukeren en adresse uten å velge, er det API-et som avgjør om den finnes og er entydig.
+const ADRESSEREGISTER = 'https://ws.geonorge.no/adresser/v1/sok';
+const REGISTERFELT = ['adressetekst', 'adressetekstutenadressetilleggsnavn', 'postnummer', 'poststed', 'kommunenummer', 'kommunenavn']
+  .map(felt => 'adresser.' + felt).join(',') + ',metadata.totaltAntallTreff';
+const FORSLAG_HENTES = 30;        // flere enn det som vises, slik at de som passer best kan stå først
+const FORSLAG_VISES = 8;
+const FORSLAG_PAUSE_MS = 200;     // ventetid etter siste tastetrykk
+const REGISTER_FRIST_MS = 4000;
+const REGISTER_PAUSE_MS = 30000;  // så lenge venter vi med å prøve igjen når registeret ikke svarer
+const TALL_OG_BOKSTAV = /(\d)\s+([a-hj-zæøå])(?![\p{L}\p{N}])/gu;   // «12 b» er det samme som «12b» (ikke i: «4 i Bergen»)
+
+const inp = document.getElementById('inp');
+const forslagBoks = document.getElementById('forslag');
+const forslagInfo = document.getElementById('forslag-info');
+const forslagListe = document.getElementById('forslag-liste');
+
+let valgt = null;       // adressen som er valgt fra listen
+let forslag = [];       // adressene som står i listen nå
+let aktiv = -1;         // raden som er markert med piltastene
+let forslagNr = 0;      // øker når teksten endres, slik at et tregt svar ikke erstatter et nyere
+let forslagTimer = null;
+let registerNedeTil = 0;
+let avvistTekst = null; // teksten API-et sist svarte «velg en adresse» på, så lenge listen derfra står åpen
+const forslagCache = new Map();
+
+// Deler en tekst i ord som kan sammenlignes: «Storgata 12 B, 0155 Oslo» blir storgata, 12b, 0155, oslo
+function ord(tekst) {
+  return String(tekst ?? '').normalize('NFC').toLowerCase()
+    .replace(TALL_OG_BOKSTAV, '$1$2')
+    .split(/[\s,;()\-–—.]+/)
+    .filter(Boolean);
+}
+
+// Sant når det som er skrevet, begynner med hele denne adressen. Brukes til å sortere forslagene.
+function begynnerMedAdressen(a, sokeord) {
+  return [a.adressetekst, a.adressetekstutenadressetilleggsnavn].some(tekst => {
+    const adr = ord(tekst);
+    return adr.length > 0 && adr.length <= sokeord.length && adr.every((o, i) => o === sokeord[i]);
+  });
+}
+
+function stedstekst(a) {
+  const post = `${a.postnummer ?? ''} ${a.poststed ?? ''}`.trim();
+  const sammeNavn = String(a.kommunenavn ?? '').toLowerCase() === String(a.poststed ?? '').toLowerCase();
+  return post + (a.kommunenavn && !sammeNavn ? ` · ${a.kommunenavn} kommune` : '');
+}
+
+function visningstekst(a) {
+  return [a.adressetekst, `${a.postnummer ?? ''} ${a.poststed ?? ''}`.trim()].filter(Boolean).join(', ');
+}
+
+// Lager søket til adresseregisteret. Stjernen gjør at det siste ordet kan være påbegynt.
+// Etter mellomrom eller komma er ordet ferdig skrevet, og da søkes det uten stjerne.
+function registersok(tekst) {
+  const sokeord = tekst.normalize('NFC').toLowerCase()
+    .replace(/[^\p{L}\p{N}\/.'\- ]+/gu, ' ')
+    .replace(TALL_OG_BOKSTAV, '$1$2')
+    .split(' ')
+    .filter(o => /[\p{L}\p{N}]/u.test(o))
+    .filter((o, i, alle) => o !== 'i' || i === alle.length - 1);   // «Storgata 1 i Oslo»: i-en er ikke en del av adressen
+  if (sokeord.join('').length < 3) return null;   // for lite å søke på
+  return sokeord.join(' ') + (/[\s,]$/.test(tekst) ? '' : '*');
+}
+
+// Henter adresser som passer med teksten. Gir null når teksten er for kort, og kaster når registeret ikke svarer.
+async function hentForslag(tekst) {
+  const sokestreng = registersok(tekst);
+  if (!sokestreng) return null;
+  if (forslagCache.has(sokestreng)) return forslagCache.get(sokestreng);
+  if (Date.now() < registerNedeTil) throw new Error('Adresseregisteret svarer ikke');
+
+  const styring = new AbortController();
+  const frist = setTimeout(() => styring.abort(), REGISTER_FRIST_MS);
+  try {
+    const parametre = new URLSearchParams({ sok: sokestreng, treffPerSide: FORSLAG_HENTES, filtrer: REGISTERFELT });
+    let r;
+    try {
+      r = await fetch(`${ADRESSEREGISTER}?${parametre}`, { signal: styring.signal });
+      if (r.status >= 500 || r.status === 429) throw new Error(`HTTP ${r.status}`);
+    } catch (e) {
+      registerNedeTil = Date.now() + REGISTER_PAUSE_MS;   // ingen forbindelse, for tregt eller overbelastet
+      throw e;
+    }
+    const d = r.ok ? await r.json() : {};   // andre feil gjelder bare dette søket, og regnes som ingen treff
+    const alle = d.adresser ?? [];
+    // Adressene som det som er skrevet begynner med, står først. Ellers beholdes registerets rekkefølge.
+    const sokeord = ord(tekst);
+    const forst = alle.filter(a => begynnerMedAdressen(a, sokeord));
+    const svar = { treff: [...forst, ...alle.filter(a => !forst.includes(a))], totalt: d.metadata?.totaltAntallTreff ?? alle.length };
+    if (forslagCache.size >= 50) forslagCache.clear();
+    forslagCache.set(sokestreng, svar);
+    return svar;
+  } finally {
+    clearTimeout(frist);
+  }
+}
+
+function visForslag(liste, melding = '') {
+  forslag = liste;
+  aktiv = -1;
+  forslagInfo.textContent = melding;
+  forslagListe.replaceChildren(...liste.map((a, i) => {
+    const li = document.createElement('li');
+    li.id = 'forslag-' + i;
+    li.setAttribute('role', 'option');
+    li.setAttribute('aria-selected', 'false');
+    const adr = document.createElement('span');
+    adr.className = 'f-adr';
+    adr.textContent = a.adressetekst;
+    const sted = document.createElement('span');
+    sted.className = 'f-sted';
+    sted.textContent = stedstekst(a);
+    li.append(adr, sted);
+    return li;
+  }));
+  forslagBoks.hidden = !liste.length && !melding;
+  inp.setAttribute('aria-expanded', String(liste.length > 0));
+  inp.removeAttribute('aria-activedescendant');
+}
+
+function lukkForslag() {
+  avvistTekst = null;
+  visForslag([]);
+}
+
+// Markerer en rad i listen. -1 fjerner markeringen.
+function settAktiv(i) {
+  aktiv = i;
+  [...forslagListe.children].forEach((li, n) => li.setAttribute('aria-selected', String(n === i)));
+  if (i < 0) { inp.removeAttribute('aria-activedescendant'); return; }
+  inp.setAttribute('aria-activedescendant', 'forslag-' + i);
+  forslagListe.children[i].scrollIntoView({ block: 'nearest' });
+}
+
+function antallTekst(n) {
+  return n >= 10000 ? 'over 10 000' : n.toLocaleString('no');
+}
+
+// Oppdaterer listen mens brukeren skriver
+async function oppdaterForslag() {
+  const nr = forslagNr;
+  let svar;
+  let feilet = false;
+  try {
+    svar = await hentForslag(inp.value);
+  } catch (e) {
+    feilet = true;
+  }
+  if (nr !== forslagNr || document.activeElement !== inp) return;   // teksten er endret, eller feltet er forlatt
+  if (feilet) return visForslag([], 'Adresseforslag er ikke tilgjengelig akkurat nå. Skriv hele adressen med postnummer og trykk «Hent data».');
+  if (!svar) return lukkForslag();
+  visForslag(svar.treff.slice(0, FORSLAG_VISES),
+    !svar.treff.length ? 'Ingen adresser i registeret passer med det du har skrevet.'
+      : svar.totalt > FORSLAG_VISES ? `Viser ${FORSLAG_VISES} av ${antallTekst(svar.totalt)} adresser. Skriv mer, for eksempel postnummer eller poststed.`
+        : '');
+}
+
+// Brukeren har valgt en adresse fra listen
+function velg(a) {
+  valgt = { ...a, visning: visningstekst(a) };
+  inp.value = valgt.visning;
+  clearTimeout(forslagTimer);
+  forslagNr++;   // et svar som er underveis, skal ikke åpne listen igjen
+  hentEiendom(valgt);
+}
+
+// «Hent data», Enter uten markert rad, og eksempelknappene
 async function sok() {
-  const adresse = document.getElementById('inp').value.trim();
-  if (!adresse) return;
+  const tekst = inp.value.trim();
+  if (!tekst) return;
+  clearTimeout(forslagTimer);
+  const nr = ++forslagNr;   // et svar som er underveis, skal ikke åpne listen igjen
+  if (valgt && valgt.visning === tekst) return hentEiendom(valgt);
+  if (avvistTekst === tekst && forslag.length) return;   // listen med adresser å velge mellom står allerede åpen
+
+  // En adresse har et husnummer eller et gårds- og bruksnummer. Uten tall må brukeren velge fra listen.
+  if (!/\d/.test(tekst)) {
+    let svar = null;
+    try { svar = await hentForslag(tekst); } catch (e) { /* registeret svarer ikke: API-et får svare under */ }
+    if (nr !== forslagNr || inp.value.trim() !== tekst) return;   // brukeren har skrevet videre
+    if (svar?.treff.length) {
+      visForslag(svar.treff.slice(0, FORSLAG_VISES), 'Velg en adresse i listen.');
+      inp.focus();
+      return;
+    }
+  }
+  // Ellers avgjør API-et: én adresse som passer nøyaktig gir data, og ellers kommer det kandidater å velge mellom
+  hentEiendom({ fritekst: tekst });
+}
+
+const KORT = ['kart','adr','teig','plan','los','berg','skred','flom','js'];
+const TREGT_OPPSLAG_MS = 10000;
+let oppslag = { sti: null, startet: 0, ferdig: true };   // det siste oppslaget
+
+// Henter data for en valgt adresse, eller for det som er skrevet når ingen adresse er valgt
+async function hentEiendom(valg) {
+  const parametre = new URLSearchParams({ adresse: valg.fritekst ?? valg.adressetekst });
+  if (!valg.fritekst && valg.postnummer) parametre.set('postnummer', valg.postnummer);
+  if (!valg.fritekst && valg.kommunenummer) parametre.set('kommunenummer', valg.kommunenummer);
+  const sti = `/eiendom?${parametre}`;
+  // Samme oppslag er allerede i gang (Enter eller knappen trykket flere ganger)
+  if (!oppslag.ferdig && oppslag.sti === sti && Date.now() - oppslag.startet < TREGT_OPPSLAG_MS) return;
+  const mitt = oppslag = { sti, startet: Date.now(), ferdig: false };
+  const tekst = inp.value.trim();
 
   skjulError();
+  lukkForslag();
   const btn = document.getElementById('btn');
   btn.disabled = true;
   btn.textContent = 'Henter…';
 
-  ['kart','adr','teig','plan','los','berg','skred','flom','js'].forEach(id => {
+  KORT.forEach(id => {
     dot(id, 'loading');
     if (id !== 'kart') body(id, '<p class="placeholder">Henter…</p>');
   });
@@ -276,13 +509,42 @@ async function sok() {
   document.getElementById('meta').style.display = 'none';
 
   try {
-    const { r, d } = await hentJsonFraApi(`/eiendom?adresse=${encodeURIComponent(adresse)}`, { headers: { 'X-Api-Key': API_KEY } });
+    const { r, d } = await hentJsonFraApi(sti, { headers: { 'X-Api-Key': API_KEY } });
+    if (mitt !== oppslag) return;   // et nyere oppslag er startet
 
     if (!r.ok) {
+      KORT.forEach(id => dot(id, 'empty'));
+      document.getElementById('map').innerHTML = '<div class="map-ph">Søk etter en adresse for å vise kart</div>';
+      // API-et gjetter ikke. Finnes adressen flere steder, eller bare nesten, sender det kandidater å velge mellom.
+      // Har brukeren skrevet noe annet i mellomtiden, gjelder ikke kandidatene lenger.
+      const uendret = inp.value.trim() === tekst;
+      const kandidater = (Array.isArray(d.kandidater) ? d.kandidater : [])
+        .map(k => ({ adressetekst: k.adresse, postnummer: k.postnummer, poststed: k.poststed, kommunenummer: k.kommunenummer, kommunenavn: k.kommunenavn }));
+      // Fantes ikke adressen, og API-et ikke har forslag, vises forslagene fra registeret på nytt
+      const fraRegister = r.status === 404 && valg.fritekst ? forslagCache.get(registersok(inp.value))?.treff.slice(0, FORSLAG_VISES) ?? [] : [];
+      if (uendret && (kandidater.length || fraRegister.length)) {
+        KORT.forEach(id => { if (id !== 'kart') body(id, '<p class="placeholder">Velg en adresse</p>'); });
+        avvistTekst = tekst;
+        visForslag(kandidater.length ? kandidater : fraRegister,
+          r.status === 404 ? (kandidater.length ? 'Fant ikke adressen slik den er skrevet. Mente du en av disse?' : 'Fant ikke adressen slik den er skrevet. Velg en adresse i listen.')
+            : d.antall === kandidater.length ? 'Adressen finnes flere steder. Velg riktig adresse i listen.'
+              : `Adressen finnes ${d.antall ? antallTekst(d.antall) : 'mange'} steder. Her er noen av dem. Skriv postnummer eller poststed for å finne riktig adresse.`);
+        inp.focus();
+        return;
+      }
+      KORT.forEach(id => { if (id !== 'kart') body(id, '<p class="placeholder">Søk etter en adresse</p>'); });
+      // Svaret gjelder en adresse som ikke lenger står i feltet: ingen feilmelding om den
+      if (!uendret && (r.status === 400 || r.status === 404)) return;
       visError(d.feil ?? 'Noe gikk galt');
-      ['kart','adr','teig','plan','los','berg','skred','flom','js'].forEach(id => dot(id, 'empty'));
       body('adr', `<p class="placeholder">${esc(d.feil ?? 'Feil')}</p>`);
       return;
+    }
+
+    // Ble det som var skrevet slått opp, vises adressen slik den står i registeret
+    if (valg.fritekst && inp.value.trim() === tekst) {
+      valgt = { adressetekst: d.meta.adresse, postnummer: d.meta.postnummer, poststed: d.meta.poststed, kommunenummer: d.meta.kommunenummer, kommunenavn: d.meta.kommunenavn };
+      valgt.visning = visningstekst(valgt);
+      inp.value = valgt.visning;
     }
 
     visKart(d);
@@ -297,11 +559,15 @@ async function sok() {
     visMeta(d.meta);
 
   } catch (e) {
+    if (mitt !== oppslag) return;
     visError(`Kunne ikke nå API-et (${API_URL}). Sjekk at Railway-tjenesten kjører.`);
-    ['kart','adr','teig','plan','los','berg','skred','flom','js'].forEach(id => dot(id, 'error'));
+    KORT.forEach(id => dot(id, 'error'));
   } finally {
-    btn.disabled = false;
-    btn.textContent = 'Hent data →';
+    mitt.ferdig = true;
+    if (mitt === oppslag) {
+      btn.disabled = false;
+      btn.textContent = 'Hent data →';
+    }
   }
 }
 
@@ -469,7 +735,38 @@ function visMeta(m) {
   document.getElementById('meta').style.display = 'flex';
 }
 
-document.getElementById('inp').addEventListener('keydown', e => { if (e.key === 'Enter') sok(); });
+inp.addEventListener('input', () => {
+  valgt = null;    // teksten er endret, så valget gjelder ikke lenger
+  avvistTekst = null;
+  forslagNr++;     // og svar på det som sto der før, skal ikke brukes
+  settAktiv(-1);   // en rad som var markert, hører til den gamle teksten
+  clearTimeout(forslagTimer);
+  forslagTimer = setTimeout(oppdaterForslag, FORSLAG_PAUSE_MS);
+});
+
+inp.addEventListener('keydown', e => {
+  if (e.isComposing) return;
+  if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && forslag.length) {
+    e.preventDefault();
+    const steg = e.key === 'ArrowDown' ? 1 : -1;
+    settAktiv(aktiv < 0 ? (steg > 0 ? 0 : forslag.length - 1) : (aktiv + steg + forslag.length) % forslag.length);
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (aktiv >= 0) velg(forslag[aktiv]); else sok();
+  } else if (e.key === 'Escape') {
+    clearTimeout(forslagTimer);
+    forslagNr++;   // et svar som er underveis, skal ikke åpne listen igjen
+    lukkForslag();
+  }
+});
+
+inp.addEventListener('blur', () => lukkForslag());
+// Et klikk i listen skal ikke flytte fokus ut av søkefeltet (da ville listen lukket seg før klikket ble registrert)
+forslagBoks.addEventListener('mousedown', e => e.preventDefault());
+forslagListe.addEventListener('click', e => {
+  const li = e.target.closest('li');
+  if (li) velg(forslag[[...forslagListe.children].indexOf(li)]);
+});
 
 // Vekker API-et mens brukeren skriver inn adressen
 hentJsonFraApi('/helse').catch(() => {});

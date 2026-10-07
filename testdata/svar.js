@@ -2,7 +2,7 @@
 // slik at tolkerne kan testes uten nettverk. Struktur og feltnavn er ekte. Lange svar er kortet
 // ned, og enkelte verdier er tilpasset for å dekke flere tilfeller (for eksempel lavpunkt).
 
-// ws.geonorge.no/adresser/v1/sok – Storgata 1, Oslo
+// ws.geonorge.no/adresser/v1/sok – Storgata 1, Oslo. Første adresse i testregisteret (adresseregister.js)
 export const ADRESSE = {
   metadata: { treffPerSide: 5, side: 0, totaltAntallTreff: 1, viserFra: 0, viserTil: 5, asciiKompatibel: true },
   adresser: [{

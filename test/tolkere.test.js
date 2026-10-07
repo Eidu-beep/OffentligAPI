@@ -6,23 +6,95 @@ import { tolkSkredfare, tolkFlomsone, tolkJordskredvarsel, norskTid } from '../s
 import { gmlObjekter, tolkLosmasse, tolkBerggrunn } from '../src/services/ngu.js';
 import { tolkPlan } from '../src/services/plan.js';
 import { tolkTeigerForMatrikkel, tolkTeigVedPunkt } from '../src/services/teig.js';
-import { tolkSoketekst } from '../src/services/adresse.js';
+import { tolkSoketekst, ord, lesemaater, passer } from '../src/services/adresse.js';
 import { wmsFeatureInfoUrl, arcgisIdentifyUrl, hentJson } from '../src/utils/wms.js';
 import { polygonAreal, utmEpsgForKommune, wgs84TilUtm33 } from '../src/utils/geo.js';
 import * as svar from '../testdata/svar.js';
 
 const treff = navn => svar.NVE[navn].results;
 
-test('adresse: søketeksten deles i gate, nummer, bokstav, postnummer og sted', () => {
-  const del = t => { const d = tolkSoketekst(t); return d && [d.adressenavn, d.nummer, d.bokstav, d.postnummer, d.sted]; };
-  assert.deepEqual(del('karl johans gate 1, oslo'), ['karl johans gate', '1', null, null, 'oslo']);
-  assert.deepEqual(del('storgata 1 oslo'), ['storgata', '1', null, null, 'oslo']);
-  assert.deepEqual(del('saudalen 120e, morvik'), ['saudalen', '120', 'E', null, 'morvik']);
-  assert.deepEqual(del('storgata 12 b, oslo'), ['storgata', '12', 'B', null, 'oslo']);
-  assert.deepEqual(del('storgata 1, 0155 oslo'), ['storgata', '1', null, '0155', 'oslo']);
-  assert.deepEqual(del('st. olavs gate 2, oslo kommune'), ['st. olavs gate', '2', null, null, 'oslo']);
-  assert.deepEqual(del('nordgardsleitet 82'), ['nordgardsleitet', '82', null, null, null]);
+test('adresse: søketeksten deles i gate, nummer, bokstav og stedsord', () => {
+  const del = t => { const d = tolkSoketekst(t); return d && [d.adressenavn, d.nummer, d.bokstav, d.stedsord.join(' ')]; };
+  assert.deepEqual(del('karl johans gate 1, oslo'), ['karl johans gate', '1', null, 'oslo']);
+  assert.deepEqual(del('storgata 1 oslo'), ['storgata', '1', null, 'oslo']);
+  assert.deepEqual(del('saudalen 120e, morvik'), ['saudalen', '120', 'E', 'morvik']);
+  assert.deepEqual(del('storgata 12 b, oslo'), ['storgata', '12', 'B', 'oslo']);
+  assert.deepEqual(del('storgata 1, 0155 oslo'), ['storgata', '1', null, '0155 oslo']);
+  assert.deepEqual(del('st. olavs gate 2, oslo kommune'), ['st. olavs gate', '2', null, 'oslo']);
+  assert.deepEqual(del('nordgardsleitet 82'), ['nordgardsleitet', '82', null, '']);
+  assert.deepEqual(del('storgata 1, 8610 mo i rana, norge'), ['storgata', '1', null, '8610 mo rana']);   // uten fyllord
+  // Tilleggsnavn foran gatenavnet er ikke en del av gatenavnet
+  assert.deepEqual(del('torvet, storgata 8a, kragerø'), ['storgata', '8', 'A', 'kragerø']);
+  // «H0201» er et bolignummer, ikke husbokstaven H
+  assert.equal(tolkSoketekst('storgata 1 h0201, oslo').bokstav, null);
+  // «4 i bergen»: i-en er ikke en sikker husbokstav. «4i» er det
+  assert.deepEqual(del('myrveien 4 i bergen'), ['myrveien', '4', null, 'bergen']);
+  assert.equal(tolkSoketekst('myrveien 4 i bergen').uklarI, true);
+  assert.deepEqual(del('myrveien 4i bergen'), ['myrveien', '4', 'I', 'bergen']);
+  assert.equal(tolkSoketekst('myrveien 4i bergen').uklarI, false);
+  assert.equal(tolkSoketekst('myrveien 4 indre østfold').uklarI, false);
   assert.equal(del('slottet oslo'), null);   // uten husnummer brukes fritekstsøk
+  assert.equal(del('flaga, 12/5'), null);    // matrikkeladresse: gårds- og bruksnummer, ikke gate og husnummer
+  assert.equal(del('163/85-1'), null);
+  assert.equal(del(', 1'), null);            // mangler gatenavn
+  assert.equal(del('12/5 5708'), null);      // gårds- og bruksnummer med postnummer, ikke gate «12/5» nummer 5708
+  assert.equal(del('storgata 123456'), null); // et husnummer har høyst fem siffer
+});
+
+test('adresse: ord som sammenlignes, uavhengig av skrivemåte', () => {
+  assert.deepEqual(ord('Storgata 12 B, 0155 Oslo'), ['storgata', '12b', '0155', 'oslo']);
+  assert.deepEqual(ord('STORGATA 12B,0155  OSLO'), ['storgata', '12b', '0155', 'oslo']);
+  assert.deepEqual(ord('St. Olavs gate 2'), ['st', 'olavs', 'gate', '2']);
+  assert.deepEqual(ord('St.Croix gate 1'), ['st.croix', 'gate', '1']);   // ett ord i registeret, og derfor her
+  assert.deepEqual(ord('Jolly Kramer-Johansens gate 1'), ['jolly', 'kramer', 'johansens', 'gate', '1']);
+  assert.deepEqual(ord('Flaga, 12/5'), ['flaga', '12/5']);
+  assert.deepEqual(ord('Storgata 12 Bergen'), ['storgata', '12', 'bergen']);   // B-en i Bergen er ikke en husbokstav
+  assert.deepEqual(ord('Storgata 1, Kabelva\u030ag'), ['storgata', '1', 'kabelvåg']);   // sammensatt å
+  assert.deepEqual(ord('...Storgata... 1.'), ['storgata', '1']);
+  assert.deepEqual(ord(null), []);
+  assert.deepEqual(ord(' , ; . - '), []);
+
+  // «4 i» leses på to måter: husnummer 4 og ordet i, eller husnummer 4I
+  assert.deepEqual(lesemaater('Myrveien 4 i Bergen'), [['myrveien', '4', 'i', 'bergen'], ['myrveien', '4i', 'bergen']]);
+  assert.deepEqual(lesemaater('Myrveien 4I, Bergen'), [['myrveien', '4i', 'bergen']]);
+  assert.deepEqual(lesemaater('Storgata 1, Mo i Rana'), [['storgata', '1', 'mo', 'i', 'rana']]);
+
+  // Lang tekst med mange punktum skal ikke ta tid (en tidligere utgave brukte kvadratisk tid)
+  const start = Date.now();
+  assert.deepEqual(ord('a' + '.'.repeat(500000) + 'a'), ['a' + '.'.repeat(500000) + 'a']);
+  assert.ok(Date.now() - start < 500, `ord() brukte ${Date.now() - start} ms`);
+});
+
+test('adresse: et treff godtas bare når det er nøyaktig adressen det ble spurt om', () => {
+  const svolvar = { adressetekst: 'Storgata 1', adressetekstutenadressetilleggsnavn: 'Storgata 1', postnummer: '8300', poststed: 'SVOLVÆR', kommunenavn: 'VÅGAN' };
+  const torvet = { adressetekst: 'Torvet, Storgata 8A', adressetekstutenadressetilleggsnavn: 'Storgata 8A', postnummer: '3770', poststed: 'KRAGERØ', kommunenavn: 'KRAGERØ' };
+  const rana = { adressetekst: 'Storgata 1', adressetekstutenadressetilleggsnavn: 'Storgata 1', postnummer: '8610', poststed: 'MO I RANA', kommunenavn: 'RANA' };
+  const ja = (a, tekst) => assert.equal(passer(a, lesemaater(tekst)), true, tekst);
+  const nei = (a, tekst) => assert.equal(passer(a, lesemaater(tekst)), false, tekst);
+
+  ja(svolvar, 'Storgata 1');
+  ja(svolvar, 'storgata 1, 8300 svolvær');
+  ja(svolvar, 'Storgata 1 Vågan');
+  ja(svolvar, 'Storgata 1, Svolvær, Vågan kommune, Norge');
+  ja(rana, 'Storgata 1, Mo i Rana');
+  ja(rana, 'Storgata 1, Rana');            // kommunen
+  ja(rana, 'Storgata 1 i Mo i Rana, Rana kommune');
+  ja(rana, 'Storgata 1, 8610 Rana');
+  ja(torvet, 'Storgata 8A, Kragerø');      // tilleggsnavnet kan utelates
+  ja(torvet, 'Torvet, Storgata 8 a');
+
+  nei(rana, 'Storgata 1, Mo');             // bare en del av poststedet
+  nei(rana, 'Storgata 1, Mo Rana');
+  nei(rana, 'Storgata 1, Rana Rana Rana'); // kommunenavnet kan ikke brukes flere ganger
+  nei(svolvar, 'Storgata 1, Kabelvåg');    // annet sted
+  nei(svolvar, 'Storgata 1, 8310 Svolvær'); // postnummeret hører ikke til adressen
+  nei(svolvar, 'Storgata 10');             // annet husnummer
+  nei(svolvar, 'Storgata 1B');
+  nei(svolvar, 'Storgaten 1');             // annen form av navnet
+  nei(svolvar, 'Nedre Storgata 1');
+  nei(svolvar, 'Storgata');                // mangler husnummer
+  nei(torvet, 'Storgata 8, Kragerø');
+  nei(torvet, 'Havna, Storgata 8A');       // feil tilleggsnavn
 });
 
 test('skredfare: i faresone, strengeste klasse oppgis', () => {
