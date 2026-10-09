@@ -44,12 +44,14 @@ async function eiendom(req, res) {
   try {
     stedsdata = await slaaOppAdresse(adresse, { kommunenummer, postnummer });
   } catch (err) {
-    // API-et gjetter ikke. Kandidatene er adressene som passer (400) eller ligner (404),
+    // API-et velger ikke mellom flere adresser. Kandidatene er adressene som passer (400) eller ligner (404),
     // og kan sendes inn igjen med postnummer og kommunenummer.
     if (err.status === 400) {
       return res.status(400).json({
         feil: err.message,
-        hjelp: 'Oppgi postnummer, enten i adressen (Storgata 1, 0155 Oslo) eller som egen parameter (&postnummer=0155). Kommunenummer kan også sendes (&kommunenummer=0301).',
+        hjelp: err.variant
+          ? 'Adressen er skrevet på en måte som passer for flere adresser. Velg en av kandidatene, og send den slik den står der, med postnummer (&postnummer=0155).'
+          : 'Oppgi postnummer, enten i adressen (Storgata 1, 0155 Oslo) eller som egen parameter (&postnummer=0155). Kommunenummer kan også sendes (&kommunenummer=0301).',
         sok: err.sok,
         ...(err.antall === null ? {} : { antall: err.antall }),   // utelates når registeret har flere treff enn vi fikk
         kandidater: err.kandidater,
@@ -90,6 +92,8 @@ async function eiendom(req, res) {
   return res.json({
     meta: {
       adresse:         stedsdata.adresse,
+      // false: adressen var skrevet litt annerledes enn i registeret (Storgaten for Storgata), men bare én passet
+      eksaktTreff:     stedsdata.eksaktTreff,
       poststed:        stedsdata.poststed,
       postnummer:      stedsdata.postnummer,
       kommunenavn:     stedsdata.kommunenavn,

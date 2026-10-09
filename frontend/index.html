@@ -299,6 +299,8 @@ const FORSLAG_PAUSE_MS = 200;     // ventetid etter siste tastetrykk
 const REGISTER_FRIST_MS = 4000;
 const REGISTER_PAUSE_MS = 30000;  // så lenge venter vi med å prøve igjen når registeret ikke svarer
 const TALL_OG_BOKSTAV = /(\d)\s+([a-hj-zæøå])(?![\p{L}\p{N}])/gu;   // «12 b» er det samme som «12b» (ikke i: «4 i Bergen»)
+const BOLIGNUMMER = /^[hkul]\d{4}$/u;   // H0201 sier hvilken leilighet, og står ikke i adresseregisteret
+const MENTE_DU = 'Ingen adresser er skrevet akkurat slik. Mente du en av disse?';
 
 const inp = document.getElementById('inp');
 const forslagBoks = document.getElementById('forslag');
@@ -343,14 +345,50 @@ function visningstekst(a) {
 // Lager søket til adresseregisteret. Stjernen gjør at det siste ordet kan være påbegynt.
 // Etter mellomrom eller komma er ordet ferdig skrevet, og da søkes det uten stjerne.
 function registersok(tekst) {
-  const sokeord = tekst.normalize('NFC').toLowerCase()
+  const alle = tekst.normalize('NFC').toLowerCase()
     .replace(/[^\p{L}\p{N}\/.'\- ]+/gu, ' ')
     .replace(TALL_OG_BOKSTAV, '$1$2')
     .split(' ')
-    .filter(o => /[\p{L}\p{N}]/u.test(o))
-    .filter((o, i, alle) => o !== 'i' || i === alle.length - 1);   // «Storgata 1 i Oslo»: i-en er ikke en del av adressen
+    .filter(o => /[\p{L}\p{N}]/u.test(o));
+  const sokeord = alle
+    .filter((o, i) => o !== 'i' || i === alle.length - 1)   // «Storgata 1 i Oslo»: i-en er ikke en del av adressen
+    .filter(o => !BOLIGNUMMER.test(o));
   if (sokeord.join('').length < 3) return null;   // for lite å søke på
-  return sokeord.join(' ') + (/[\s,]$/.test(tekst) ? '' : '*');
+  const ferdig = /[\s,]$/.test(tekst) || sokeord.at(-1) !== alle.at(-1);   // det siste ordet var et bolignummer
+  return sokeord.join(' ') + (ferdig ? '' : '*');
+}
+
+// Bokstavene uten aksenter, og æ og ø skrevet som ae og o: «Tromso» sorteres som Tromsø
+function enkleBokstaver(o) {
+  return o.normalize('NFD').replace(/\p{M}/gu, '').replace(/æ/g, 'ae').replace(/ø/g, 'o');
+}
+
+// Søket som tåler skrivefeil, gir også adresser andre steder. De som har flest ord felles med det som er
+// skrevet (gate, husnummer, postnummer, poststed og kommune), står først.
+function sorterEtterLikhet(adresser, tekst) {
+  const skrevet = ord(tekst).map(enkleBokstaver);
+  const felles = a => {
+    const ordene = new Set([a.adressetekst, a.postnummer, a.poststed, a.kommunenavn].flatMap(ord).map(enkleBokstaver));
+    return skrevet.filter(o => ordene.has(o)).length;
+  };
+  return adresser.map(a => [felles(a), a]).sort((x, y) => y[0] - x[0]).map(([, a]) => a);
+}
+
+// Ett søk i registeret, med egen tidsfrist. Svarer ikke registeret (ingen forbindelse, for tregt, overbelastet),
+// kastes en feil, og registeret får hvile en stund. Andre feil gjelder bare dette søket: ingen treff (ugyldig).
+async function sokIRegisteret(parametre) {
+  const styring = new AbortController();
+  const frist = setTimeout(() => styring.abort(), REGISTER_FRIST_MS);
+  try {
+    const r = await fetch(`${ADRESSEREGISTER}?${new URLSearchParams({ ...parametre, treffPerSide: FORSLAG_HENTES, filtrer: REGISTERFELT })}`, { signal: styring.signal });
+    if (r.status >= 500 || r.status === 429) throw new Error(`HTTP ${r.status}`);
+    return r.ok ? await r.json() : { ugyldig: true };
+  } catch (e) {
+    registerNedeTil = Date.now() + REGISTER_PAUSE_MS;
+    throw e;
+  } finally {
+    clearTimeout(frist);
+  }
 }
 
 // Henter adresser som passer med teksten. Gir null når teksten er for kort, og kaster når registeret ikke svarer.
@@ -360,30 +398,26 @@ async function hentForslag(tekst) {
   if (forslagCache.has(sokestreng)) return forslagCache.get(sokestreng);
   if (Date.now() < registerNedeTil) throw new Error('Adresseregisteret svarer ikke');
 
-  const styring = new AbortController();
-  const frist = setTimeout(() => styring.abort(), REGISTER_FRIST_MS);
-  try {
-    const parametre = new URLSearchParams({ sok: sokestreng, treffPerSide: FORSLAG_HENTES, filtrer: REGISTERFELT });
-    let r;
-    try {
-      r = await fetch(`${ADRESSEREGISTER}?${parametre}`, { signal: styring.signal });
-      if (r.status >= 500 || r.status === 429) throw new Error(`HTTP ${r.status}`);
-    } catch (e) {
-      registerNedeTil = Date.now() + REGISTER_PAUSE_MS;   // ingen forbindelse, for tregt eller overbelastet
-      throw e;
-    }
-    const d = r.ok ? await r.json() : {};   // andre feil gjelder bare dette søket, og regnes som ingen treff
-    const alle = d.adresser ?? [];
+  const d = await sokIRegisteret({ sok: sokestreng });
+  const alle = d.adresser ?? [];
+  let svar;
+  // Ingen treff. Det kan være en skrivefeil eller en annen skrivemåte: Kirkevegen for Kirkeveien, Tromso for
+  // Tromsø. Søket som tåler det, kan ikke ha stjerne. Det prøves bare når det siste ordet er ferdig skrevet,
+  // eller har minst fire tegn: et påbegynt ord («Os» for Oslo) gir ellers treff over hele landet.
+  const utenStjerne = sokestreng.replace(/\*$/, '');
+  const sisteOrd = utenStjerne.split(' ').at(-1);
+  if (!alle.length && !d.ugyldig && utenStjerne.replace(/[^\p{L}]/gu, '').length >= 4 && (utenStjerne === sokestreng || sisteOrd.length >= 4)) {
+    const uklare = (await sokIRegisteret({ sok: utenStjerne, fuzzy: 'true' })).adresser ?? [];
+    svar = { treff: sorterEtterLikhet(uklare, tekst), totalt: uklare.length, uklart: uklare.length > 0 };
+  } else {
     // Adressene som det som er skrevet begynner med, står først. Ellers beholdes registerets rekkefølge.
     const sokeord = ord(tekst);
     const forst = alle.filter(a => begynnerMedAdressen(a, sokeord));
-    const svar = { treff: [...forst, ...alle.filter(a => !forst.includes(a))], totalt: d.metadata?.totaltAntallTreff ?? alle.length };
-    if (forslagCache.size >= 50) forslagCache.clear();
-    forslagCache.set(sokestreng, svar);
-    return svar;
-  } finally {
-    clearTimeout(frist);
+    svar = { treff: [...forst, ...alle.filter(a => !forst.includes(a))], totalt: d.metadata?.totaltAntallTreff ?? alle.length };
   }
+  if (forslagCache.size >= 50) forslagCache.clear();
+  forslagCache.set(sokestreng, svar);
+  return svar;
 }
 
 function visForslag(liste, melding = '') {
@@ -442,8 +476,9 @@ async function oppdaterForslag() {
   if (!svar) return lukkForslag();
   visForslag(svar.treff.slice(0, FORSLAG_VISES),
     !svar.treff.length ? 'Ingen adresser i registeret passer med det du har skrevet.'
-      : svar.totalt > FORSLAG_VISES ? `Viser ${FORSLAG_VISES} av ${antallTekst(svar.totalt)} adresser. Skriv mer, for eksempel postnummer eller poststed.`
-        : '');
+      : svar.uklart ? MENTE_DU
+        : svar.totalt > FORSLAG_VISES ? `Viser ${FORSLAG_VISES} av ${antallTekst(svar.totalt)} adresser. Skriv mer, for eksempel postnummer eller poststed.`
+          : '');
 }
 
 // Brukeren har valgt en adresse fra listen
@@ -470,7 +505,7 @@ async function sok() {
     try { svar = await hentForslag(tekst); } catch (e) { /* registeret svarer ikke: API-et får svare under */ }
     if (nr !== forslagNr || inp.value.trim() !== tekst) return;   // brukeren har skrevet videre
     if (svar?.treff.length) {
-      visForslag(svar.treff.slice(0, FORSLAG_VISES), 'Velg en adresse i listen.');
+      visForslag(svar.treff.slice(0, FORSLAG_VISES), svar.uklart ? MENTE_DU : 'Velg en adresse i listen.');
       inp.focus();
       return;
     }
@@ -527,6 +562,7 @@ async function hentEiendom(valg) {
         avvistTekst = tekst;
         visForslag(kandidater.length ? kandidater : fraRegister,
           r.status === 404 ? (kandidater.length ? 'Fant ikke adressen slik den er skrevet. Mente du en av disse?' : 'Fant ikke adressen slik den er skrevet. Velg en adresse i listen.')
+            : d.feil === 'Adressen kan være flere adresser' ? 'Adressen kan være flere adresser. Velg riktig adresse i listen.'
             : d.antall === kandidater.length ? 'Adressen finnes flere steder. Velg riktig adresse i listen.'
               : `Adressen finnes ${d.antall ? antallTekst(d.antall) : 'mange'} steder. Her er noen av dem. Skriv postnummer eller poststed for å finne riktig adresse.`);
         inp.focus();
@@ -589,7 +625,8 @@ function visAdresse(d) {
     f('Adresse', m.adresse, 'a') +
     f('Poststed', `${m.postnummer} ${m.poststed}`) +
     f('Kommune', `${m.kommunenavn} (${m.kommunenummer})`) +
-    f('Matrikkel', `Gnr ${k.gardsnummer} / Bnr ${k.bruksnummer}${k.seksjonsnummer ? ' / S' + k.seksjonsnummer : ''}${k.festenummer ? ' / F' + k.festenummer : ''}`, 'a2')
+    f('Matrikkel', `Gnr ${k.gardsnummer} / Bnr ${k.bruksnummer}${k.seksjonsnummer ? ' / S' + k.seksjonsnummer : ''}${k.festenummer ? ' / F' + k.festenummer : ''}`, 'a2') +
+    (m.eksaktTreff === false ? note('Adressen var skrevet litt annerledes enn i adresseregisteret. Dataene gjelder adressen over.') : '')
   );
   dot('adr', 'ok');
 }

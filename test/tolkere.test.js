@@ -6,7 +6,8 @@ import { tolkSkredfare, tolkFlomsone, tolkJordskredvarsel, norskTid } from '../s
 import { gmlObjekter, tolkLosmasse, tolkBerggrunn } from '../src/services/ngu.js';
 import { tolkPlan } from '../src/services/plan.js';
 import { tolkTeigerForMatrikkel, tolkTeigVedPunkt } from '../src/services/teig.js';
-import { tolkSoketekst, ord, lesemaater, passer } from '../src/services/adresse.js';
+import { tolkSoketekst, ord, lesemaater, passer, ryddTekst, utenForkortelser, navnenokkel, andreNavneformer, skrivemaate, kanSkrivesSom }
+  from '../src/services/adresse.js';
 import { wmsFeatureInfoUrl, arcgisIdentifyUrl, hentJson } from '../src/utils/wms.js';
 import { polygonAreal, utmEpsgForKommune, wgs84TilUtm33 } from '../src/utils/geo.js';
 import * as svar from '../testdata/svar.js';
@@ -95,6 +96,129 @@ test('adresse: et treff godtas bare når det er nøyaktig adressen det ble spurt
   nei(svolvar, 'Storgata');                // mangler husnummer
   nei(torvet, 'Storgata 8, Kragerø');
   nei(torvet, 'Havna, Storgata 8A');       // feil tilleggsnavn
+});
+
+test('adresse: bolignummer og forkortelser', () => {
+  assert.deepEqual(ord(ryddTekst('Storgata 1 H0201, 0155 Oslo')), ['storgata', '1', '0155', 'oslo']);
+  assert.deepEqual(ord(ryddTekst('Storgata 1, U0101')), ['storgata', '1']);
+  assert.deepEqual(ord(ryddTekst('K0101 L0202 Storgata 1')), ['storgata', '1']);
+  assert.deepEqual(ord(ryddTekst('Storgata 1 (H0201), Oslo')), ['storgata', '1', 'oslo']);
+  assert.deepEqual(ord(ryddTekst('Storgata 1, 0155 Oslo, H0201.')), ['storgata', '1', '0155', 'oslo']);
+  assert.deepEqual(ord(ryddTekst('Storgata 1 H02')), ['storgata', '1', 'h02']);           // ikke et helt bolignummer
+  assert.deepEqual(ord(ryddTekst('Storgata 1 H02010')), ['storgata', '1', 'h02010']);
+  assert.deepEqual(ord(ryddTekst('Storgata 1 H 0155 Oslo')), ['storgata', '1h', '0155', 'oslo']);   // husbokstav og postnummer
+  assert.deepEqual(ord(ryddTekst('Hovedgata 1')), ['hovedgata', '1']);
+  assert.equal(ryddTekst('Storgt.1, Oslo'), 'storgt. 1, oslo');
+  assert.equal(ryddTekst('St.Croix gate 1'), 'st.croix gate 1');
+
+  assert.equal(utenForkortelser('Storgt. 1, Oslo'), 'storgate 1, oslo');
+  assert.equal(utenForkortelser('Storgt 1'), 'storgate 1');
+  assert.equal(utenForkortelser('Karl Johans gt. 1'), 'karl johans gate 1');
+  assert.equal(utenForkortelser('Kirkevn. 5'), 'kirkevei 5');
+  assert.equal(utenForkortelser('Kirkev. 5, Oslo'), 'kirkevei 5, oslo');
+  assert.equal(utenForkortelser('Karl Johans vn. 1'), 'karl johans vei 1');
+  assert.equal(utenForkortelser('Strand v. 1'), 'strand vei 1');
+  assert.equal(utenForkortelser('V. Strandgate 1'), 'v. strandgate 1');     // v. foran navnet er ikke vei
+  assert.equal(utenForkortelser('Nyhavn 5'), 'nyhavn 5');                   // vn uten punktum er ikke en forkortelse
+  assert.equal(utenForkortelser('St. Olavs gate 2'), 'st. olavs gate 2');
+  assert.equal(utenForkortelser('Kirkevegen 3, Hov.'), 'kirkevegen 3, hov.');   // stedet etter husnummeret endres ikke
+  assert.equal(utenForkortelser('Storgt. 1, Bugt'), 'storgate 1, bugt');
+});
+
+test('adresse: gatenavnet med én form av endelsen', () => {
+  const nokkel = t => navnenokkel(ord(t));
+  assert.equal(nokkel('Storgata'), 'storgate');
+  assert.equal(nokkel('Storgaten'), 'storgate');
+  assert.equal(nokkel('Storgate'), 'storgate');
+  assert.equal(nokkel('Kirkevegen'), 'kirkevei');
+  assert.equal(nokkel('Kirkeveg'), nokkel('Kirkeveien'));
+  assert.equal(nokkel('Kirkevei'), nokkel('Kirkeveien'));
+  assert.equal(nokkel('Karl Johans gate'), nokkel('Karl Johansgate'));
+  assert.equal(nokkel('Karl Johans gt'), nokkel('Karl Johans gate'));
+  assert.equal(kanSkrivesSom(nokkel('Bygdoy alle'), nokkel('Bygdøy allé')), true);
+  assert.equal(kanSkrivesSom('tromso', 'tromsø'), true);
+  assert.equal(kanSkrivesSom('tromsoe', 'tromsø'), true);
+  assert.equal(kanSkrivesSom('aalesund', 'ålesund'), true);
+  assert.equal(kanSkrivesSom('baerum', 'bærum'), true);
+  assert.equal(kanSkrivesSom('bygdøy', 'bygdøy'), true);
+  assert.equal(kanSkrivesSom('åsveien', 'asveien'), false);   // en å som er skrevet, må stå i registeret
+  assert.equal(kanSkrivesSom('kåbelvag', 'kabelvåg'), false); // på samme plass
+  assert.equal(kanSkrivesSom('tromsa', 'tromsø'), false);
+  assert.equal(kanSkrivesSom('trom', 'tromsø'), false);
+  assert.equal(nokkel('St. Olavs gate'), nokkel('St.Olavs gate'));
+  assert.equal(nokkel('Øvre vei'), nokkel('Øvreveien'));
+  assert.equal(nokkel('Gate'), 'gate');                    // ingenting foran endelsen: ingen annen form
+  assert.notEqual(nokkel('Gata'), nokkel('Gate'));
+  assert.notEqual(nokkel('Nyhavn'), nokkel('Nyhaveien'));
+  assert.notEqual(nokkel('Lia'), nokkel('Lien'));           // bare gate og vei har flere former
+  assert.notEqual(nokkel('Storgata'), nokkel('Stogata'));   // skrivefeil
+
+  // Former å søke etter, som registeret ikke finner selv
+  assert.deepEqual(andreNavneformer('kirkevegen'), ['kirkevei', 'kirke veg', 'kirke vei']);
+  assert.deepEqual(andreNavneformer('kirkeveien'), ['kirkeveg', 'kirke vei', 'kirke veg']);
+  assert.deepEqual(andreNavneformer('kirkevei'), ['kirkeveg', 'kirke vei', 'kirke veg']);
+  assert.deepEqual(andreNavneformer('øvrevei'), ['øvreveg', 'øvre vei', 'øvre veg']);
+  assert.deepEqual(andreNavneformer('karl johansgate'), ['karl johans gate']);
+  assert.deepEqual(andreNavneformer('storgata'), ['stor gate']);   // Storgaten og Storgate finner registeret selv
+  assert.deepEqual(andreNavneformer('kongens gate'), ['kongensgate']);
+  assert.deepEqual(andreNavneformer('kongens vegen'), ['kongens vei', 'kongensveg', 'kongensvei']);
+  assert.deepEqual(andreNavneformer('bygdøy allé'), []);
+  assert.deepEqual(andreNavneformer('gate'), []);
+  assert.deepEqual(andreNavneformer(''), []);
+});
+
+test('adresse: annen skrivemåte av samme adresse, eller et lengre navn', () => {
+  const kabelvag = { adressenavn: 'Storgata', nummer: 1, bokstav: '', postnummer: '8310', poststed: 'KABELVÅG', kommunenavn: 'VÅGAN' };
+  const ovre = { adressenavn: 'Øvre Storgate', nummer: 10, bokstav: '', postnummer: '3018', poststed: 'DRAMMEN', kommunenavn: 'DRAMMEN' };
+  const kongens = { adressenavn: 'Kongens gate', nummer: 10, bokstav: '', postnummer: '3017', poststed: 'DRAMMEN', kommunenavn: 'DRAMMEN' };
+  const haugen = { adressenavn: 'Haugen', nummer: 7, bokstav: 'I', postnummer: '5099', poststed: 'BERGEN', kommunenavn: 'BERGEN' };
+  const flaga = { adressenavn: null, nummer: null, bokstav: null, postnummer: '5708', poststed: 'VOSS', kommunenavn: 'VOSS' };
+  const torvet = { adressenavn: 'Storgata', nummer: 8, bokstav: 'A', adressetekst: 'Torvet, Storgata 8A', adressetekstutenadressetilleggsnavn: 'Storgata 8A',
+    postnummer: '3770', poststed: 'KRAGERØ', kommunenavn: 'KRAGERØ' };
+  const asveien = { adressenavn: 'Asveien', nummer: 2, bokstav: '', postnummer: '1400', poststed: 'SKI', kommunenavn: 'NORDRE FOLLO' };
+  const asveienMedA = { ...asveien, adressenavn: 'Åsveien' };
+  const s = (a, tekst) => skrivemaate(a, lesemaater(utenForkortelser(tekst)))?.type ?? null;
+  const sted = (a, tekst) => skrivemaate(a, lesemaater(utenForkortelser(tekst))).sted;
+
+  assert.equal(s(kabelvag, 'Storgaten 1, Kabelvag'), 'samme');
+  assert.equal(s(kabelvag, 'Storgt. 1, Kabelvaag'), 'samme');
+  assert.equal(s(kabelvag, 'Storgate 1, 8310'), 'samme');
+  assert.equal(s(kabelvag, 'Storgaten 1, Vagan kommune, Norge'), 'samme');
+  assert.equal(s(kabelvag, 'Storgaten 1'), 'samme');            // uten sted
+  assert.equal(s(kabelvag, 'Storgaten 1B, Kabelvåg'), null);    // annen bokstav
+  assert.equal(s(kabelvag, 'Storgaten 10, Kabelvåg'), null);    // annet husnummer
+  assert.equal(s(kabelvag, 'Storgaten 1, Svolvær'), null);      // annet sted
+  assert.equal(s(kabelvag, 'Storgaten 1, Kabel'), null);        // bare en del av stedet
+  assert.equal(s(kabelvag, 'Stogata 1, Kabelvåg'), null);       // skrivefeil i navnet er bare forslag
+  assert.equal(s(kabelvag, 'Nedre Storgata 1, Kabelvåg'), null);
+  // Navnene stedet passet med: 0 postnummer, 1 poststed, 2 kommunenavn
+  assert.deepEqual(sted(kabelvag, 'Storgaten 1, 8310'), [0]);
+  assert.deepEqual(sted(kabelvag, 'Storgaten 1, Kabelvag, Vagan'), [1, 2]);
+  assert.deepEqual(sted(kabelvag, 'Storgaten 1'), []);
+  assert.equal(s(ovre, 'Storgata 10, Drammen'), 'lengre');
+  assert.equal(s(ovre, 'Ovre Storgaten 10, Drammen'), 'samme');
+  assert.equal(s(kongens, 'Gate 10, Drammen'), null);           // «gate» alene er ikke et navn
+  assert.equal(s(haugen, 'Haugen 7 i Bergen'), 'samme');        // «7 i»: husnummer 7I
+  assert.equal(s(haugen, 'Haugen 7, Bergen'), null);
+  assert.equal(s(flaga, 'Flaga 12/5'), null);                   // matrikkeladresser har ikke gatenavn
+  assert.equal(s(torvet, 'Torvet, Storgaten 8A, Kragero'), 'samme');   // tilleggsnavnet kan stå først
+  assert.equal(s(torvet, 'Havna, Storgaten 8A, Kragerø'), null);
+  // Æ, ø og å som er skrevet, må stå i registeret også. Det motsatte går an.
+  assert.equal(s(asveien, 'Åsveien 2, Ski'), null);
+  assert.equal(s(asveienMedA, 'Asveien 2, Ski'), 'samme');
+  assert.equal(s(kabelvag, 'Storgaten 1, Kåbelvag'), null);
+  // «Kirkev.» er en forkortelse: alle navn som begynner med kirkev, passer
+  const forkortet = (a, tekst) => skrivemaate(a, lesemaater(utenForkortelser(tekst, false)), true)?.type ?? null;
+  const kirkevika = { adressenavn: 'Kirkevika', nummer: 1, bokstav: '', postnummer: '0250', poststed: 'OSLO', kommunenavn: 'OSLO' };
+  const kirkeveien = { ...kirkevika, adressenavn: 'Kirkeveien' };
+  assert.equal(forkortet(kirkevika, 'Kirkev. 1, Oslo'), 'samme');
+  assert.equal(forkortet(kirkeveien, 'Kirkev. 1, Oslo'), 'samme');
+  assert.equal(forkortet(kirkeveien, 'Kirke v. 1, Oslo'), 'samme');
+  assert.equal(forkortet({ ...kirkevika, adressenavn: 'Kirkebakken' }, 'Kirkev. 1, Oslo'), null);
+  assert.equal(utenForkortelser('Kirkev. 1', false), 'kirkev. 1');
+  assert.equal(utenForkortelser('Kirkevn. 1', false), 'kirkevei 1');
+  assert.equal(kanSkrivesSom('kirkev', 'kirkeveien', true), true);
+  assert.equal(kanSkrivesSom('kirkev', 'kirkeveien'), false);
 });
 
 test('skredfare: i faresone, strengeste klasse oppgis', () => {

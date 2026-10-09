@@ -2,7 +2,7 @@
 
 Les hele denne filen før du gjør noe. Den beskriver prosjektet, gjeldende tilstand, kjente feller og hva som skal gjøres videre. Oppdater filen når status endrer seg.
 
-Sist oppdatert: 2026-10-07.
+Sist oppdatert: 2026-10-08.
 
 ## Prosjektet
 
@@ -34,7 +34,9 @@ GitHub-repoet `Eidu-beep/OffentligAPI`, branch `main`. Arbeidsmappen skal være 
 
 Endringene fra 2026-10-03 og 2026-10-04 ble committet og pushet 2026-10-04 med GitHub Desktop (commit `e9c3550`, «Retter datakildene og legger databasen på volum»). Samme dag ble demo-nøkkelen satt inn i `frontend/index.html` og pushet i en egen commit, og deretter rettelsen for «Deploy crashed»-e-postene (ryddig avslutning på SIGTERM).
 
-2026-10-07 kom adressevalget: forslag fra Kartverkets adresseregister på demo-siden, og et API som ikke gjetter når en adresse finnes flere steder. Se «Adresseoppslag». Endringen ble levert til arbeidsmappen 2026-10-07.
+2026-10-07 kom adressevalget: forslag fra Kartverkets adresseregister på demo-siden, og et API som ikke gjetter når en adresse finnes flere steder. Se «Adresseoppslag». Endringen ble committet og pushet samme dag med GitHub Desktop (commit `04d8035`, «Adressevalg: forslag fra adresseregisteret, og oppslag som ikke gjetter»). Kontrollert etter pushen: deployen hos Railway var aktiv og den forrige fjernet uten krasjmelding, Netlify serverte den nye demo-siden, tolv oppslag gjennom det deployede API-et ga de ventede svarene, og adressevalget ble prøvd på den publiserte demo-siden i brukerens nettleser.
+
+2026-10-08 kom andre skrivemåter. Brukeren vil at det skal være best mulig for kundene å hente informasjon. API-et godtar nå en annen skrivemåte av adressen (Storgaten for Storgata, Kirkevegen for Kirkeveien, Storgt., Tromso for Tromsø, bolignummer) når nøyaktig én adresse i området passer, og sier fra med `meta.eksaktTreff: false`. En gjennomgang av endringen fant at søkene ikke alltid finner alle skrivemåtene. Derfor kontrolleres alle adressene med husnummeret i området før en annen skrivemåte godtas. Demo-siden viser forslag som tåler skrivefeil når det vanlige søket ikke gir treff. Se «Adresseoppslag». Endringen ble levert til arbeidsmappen 2026-10-08 og er ikke pushet ennå.
 
 ## Arkitektur
 
@@ -54,11 +56,13 @@ Admin-siden deployes **ikke** av en push hit. Netlify bygger den fra repoet `Eid
 
 Netlify-innstillinger (lest 2026-10-04): begge sidene har Base directory `/`, ingen Build command, Production branch `main` og Node 22.x. Publish directory er `frontend` for demo-siden og `admin` for admin-siden.
 
-Samle endringer i få pusher. Netlify-kontoen har gratisplanen med 300 kreditter per måned (perioden starter den 26.), og hver produksjonsdeploy koster 15 kreditter. Pushen 2026-10-04 kostet 15, og 285 var igjen etterpå. Når kredittene er brukt opp, settes begge sidene på pause til neste periode. Forbruket står under **Usage & billing** i Netlify.
+Samle endringer i få pusher. Netlify-kontoen har gratisplanen med 300 kreditter per måned (perioden starter den 26.), og hver produksjonsdeploy koster 15 kreditter. Den første pushen 2026-10-04 kostet 15, og 285 var igjen etterpå. Siden er det pushet tre ganger til: to samme dag og én 2026-10-07 (pushene står i `.git/logs/refs/remotes/origin/main`). Med 15 for hver er 240 igjen i perioden som varer til og med den 25. Det er regnet ut, ikke lest i Netlify. Når kredittene er brukt opp, settes begge sidene på pause til neste periode. Forbruket står under **Usage & billing** i Netlify.
 
 ### Gjenopprettingsdokument
 
-`Desktop\Eidu\Eiendomsdata-API_oppsett_og_gjenoppretting.pdf` ligger utenfor repoet. Det beskriver API-ene som brukes, innstillingene hos Railway og Netlify, og hvordan alt settes opp igjen. Laget 2026-10-04 på brukerens forespørsel. Det er en PDF fordi PC-en ikke har Word. Lag en ny utgave når oppsettet endres. Dokumentet skal ikke inneholde nøkler eller passord.
+`Desktop\Eidu\Eiendomsdata-API_oppsett_og_gjenoppretting.pdf` ligger utenfor repoet. Det beskriver API-ene som brukes, innstillingene hos Railway og Netlify, og hvordan alt settes opp igjen. Laget 2026-10-04 på brukerens forespørsel. Ny utgave 2026-10-07 med adressevalget (kapittel 1, 3, 8 og 9). Det er en PDF fordi PC-en ikke har Word. Lag en ny utgave når oppsettet endres. Dokumentet skal ikke inneholde nøkler eller passord.
+
+Kilden ligger i samme mappe: `Eiendomsdata-API_oppsett_og_gjenoppretting_kilde.py` (Python med reportlab og skriftene Liberation Sans og Liberation Mono). Kjør `python3 <kilden> <ut.pdf>`, og se gjennom hver side før PDF-en leveres. Sideskiftene er tilpasset teksten, og `--maal` viser hvor mye plass som er igjen på hver side. Kilden skal ikke inn i repoet, fordi den beskriver kontoene og oppsettet.
 
 ### Railway
 
@@ -129,39 +133,61 @@ Viktig for kundene: «ikke i faresone» betyr bare trygt der `kartlagt` er `true
 
 ## Adresseoppslag
 
-Bygd 2026-10-07 etter ønske fra brukeren: samme adresse finnes ofte flere steder, og oppslaget skal gjelde en adresse som finnes. Kilden er Kartverkets adresse-API, som søker i matrikkelens adresser (det offisielle registeret, CC BY 4.0, åpent uten nøkkel). Hele registeret kan også lastes ned («Matrikkelen - Adresse» i Geonorge), men det trengs ikke.
+Bygd 2026-10-07 etter ønske fra brukeren: samme adresse finnes ofte flere steder, og oppslaget skal gjelde en adresse som finnes. Utvidet 2026-10-08 med andre skrivemåter, fordi det skal være best mulig for kundene å hente informasjon. Kilden er Kartverkets adresse-API, som søker i matrikkelens adresser (det offisielle registeret, CC BY 4.0, åpent uten nøkkel). Hele registeret kan også lastes ned («Matrikkelen - Adresse» i Geonorge), men det trengs ikke.
 
-**API-et gjetter aldri.** Reglene står i `src/services/adresse.js`:
+**API-et velger aldri mellom flere adresser.** Reglene står i `src/services/adresse.js`:
 
-- 200: nøyaktig én adresse passer. `meta.adresse` er adresseteksten slik den står i registeret, også med tilleggsnavn («Torvet, Storgata 8A») og for matrikkeladresser («Flaga, 12/5»).
-- 400 med `kandidater`: adressen finnes flere steder. `antall` er med når registeret har gitt alle treffene.
-- 404: adressen finnes ikke slik den er skrevet. `kandidater` har adresser som ligner, når det finnes noen (annen bokstav, skrivefeil, samme adresse et annet sted).
+- 200: nøyaktig én adresse passer. `meta.adresse` er adresseteksten slik den står i registeret, også med tilleggsnavn («Torvet, Storgata 8A») og for matrikkeladresser («Flaga, 12/5»). `meta.eksaktTreff` er `false` når adressen var skrevet på en annen måte (se under).
+- 400 med `kandidater`: adressen finnes flere steder (`feil`: «Adressen finnes flere steder»), eller teksten er skrevet på en måte som passer for flere adresser («Adressen kan være flere adresser»). `antall` er med når registeret har gitt alle treffene.
+- 404: ingen adresse passer, heller ikke med en annen skrivemåte. `kandidater` har adresser som ligner, når det finnes noen (annen bokstav, skrivefeil, samme adresse et annet sted).
 - 400 uten `kandidater`: en parameter mangler eller er ugyldig. `adresse` kan ha høyst 200 tegn og må ha minst én bokstav eller ett tall.
 
-Hva «passer» betyr: teksten må være adressen, eventuelt fulgt av adressens eget postnummer, poststed eller kommunenavn. Store og små bokstaver, komma, punktum og bindestrek spiller ingen rolle. Stedet må være hele navnet: «Rana» og «Mo i Rana» passer for 8610 MO I RANA i Rana kommune, «Mo» gjør det ikke. «Kristiansund» passer for poststedet KRISTIANSUND N fordi kommunen heter det. Ordene «i», «kommune», «Norge» og «Norway» etter adressen hoppes over. «Storgaten» er ikke «Storgata»: da svarer API-et 404 med Storgata som kandidat.
+Hva «passer» betyr: teksten må være adressen, eventuelt fulgt av adressens eget postnummer, poststed eller kommunenavn. Store og små bokstaver, komma, punktum og bindestrek spiller ingen rolle. Stedet må være hele navnet: «Rana» og «Mo i Rana» passer for 8610 MO I RANA i Rana kommune, «Mo» gjør det ikke. «Kristiansund» passer for poststedet KRISTIANSUND N fordi kommunen heter det. Ordene «i», «kommune», «Norge» og «Norway» etter adressen hoppes over, og bolignummer (H0201, U0101, K0101, L0101, også i parentes) tas bort før søket. Med mellomrom («H 0201») tas det ikke bort, for «Storgata 1 H 0155 Oslo» er husbokstav og postnummer.
 
 «Myrveien 4 i Bergen» kan bety husnummer 4 i Bergen, eller husnummer 4I. Begge lesemåtene prøves (`lesemaater`), og finnes begge adressene, er svaret 400.
+
+**Andre skrivemåter** (2026-10-08). Passer ingen adresse nøyaktig, prøves disse (`skrivemaate`, `navnenokkel`, `kanSkrivesSom`):
+
+- Endelsen: Storgata, Storgaten og Storgate er samme navn, og Kirkeveien, Kirkevegen, Kirkevei og Kirkeveg er samme navn. Det må stå noe foran endelsen. Andre ord (Lia og Lien, Bakke og Bakken) regnes ikke som samme navn, fordi det ofte er forskjellige gårdsnavn.
+- Forkortelser i gatenavnet (ordene foran husnummeret): gt og gt. for gate, og vn. for vei. «v.» sist i navnet («Kirkev. 5», «Strand v. 5») er en forkortelse for et navn som begynner slik: Kirkeveien, men også Kirkevika. Finnes flere slike med husnummeret i området, blir svaret 400. vn og v bare med punktum, fordi navn som Nyhavn ender på vn. «V. Strandgate» endres ikke, og stedet etter husnummeret endres aldri («Hov.» er Hov).
+- Mellomrom: «Karl Johansgate» og «Karl Johans gate» er samme navn, og «Øvrevei» og «Øvre vei».
+- Aksenter og æ, ø og å skrevet uten, i gatenavnet og stedet: Bygdoy alle, Tromso, Tromsoe, Aalesund, Baerum. Det motsatte gjelder ikke: en æ, ø, å eller aksent som er skrevet, må stå på samme plass i registeret. «Åsveien» er ikke «Asveien».
+- Tilleggsnavnet kan stå først: «Torvet, Storgaten 8A, Kragerø».
+- Husnummer, bokstav og sted må alltid stemme. Skrivefeil i navnet («Stogata») gir bare forslag.
+
+Treff med en annen skrivemåte deles i to: samme navn («samme»), og navn med flere ord foran («lengre», som Øvre Storgate for Storgate). Søkene i trinn 2 under finner dem, men kanskje ikke alle. **Før en annen skrivemåte godtas, hentes derfor alle adresser med samme husnummer og bokstav i området stedet gjelder, uansett gatenavn**, og alle vurderes (trinn 4). Området er postnummeret når det er skrevet eller sendt som parameter, kommunen når `kommunenummer` er sendt, og ellers poststedet og kommunen med navnet som er skrevet (begge, fordi Våler er navnet på to kommuner og et poststed). Registerets skrivemåte av navnet brukes i søket, fordi det ikke finner Tromsø for Tromso.
+
+Bare én «samme» og ingen «lengre» i området gir 200 med `eksaktTreff: false`. Minst én «samme» og til sammen flere enn én gir 400 «Adressen kan være flere adresser» med alle som kandidater: «Storgate 10, Drammen» kan være Storgaten 10 i Svelvik, Øvre Storgate 10 og Nedre Storgate 10. Bare «lengre» gir 404 med dem som forslag: «Kirkeveien 1, Kristiansand» gir Oddernes kirkevei 1 og Greipstad gamle kirkeveg 1. «Gate 10» alene teller ikke Kongens gate 10 som en mulig adresse. Finnes adressen nøyaktig slik den er skrevet, er det den, selv om en annen skrivemåte også finnes («Storgaten 10, Drammen» gir Storgaten 10 i Svelvik).
+
+**Uten sted og uten `postnummer` eller `kommunenummer` blir en annen skrivemåte aldri et treff**, bare et forslag (404), eller 400 når søkene har funnet flere. Da kan adressen finnes et annet sted i landet, og hele landet kan ikke kontrolleres. «Bygdøy Alle 5» gir 404 med Bygdøy allé 5 som forslag. Det samme skjer når området har flere enn 5000 adresser med husnummeret, eller et kall feilet.
 
 Slik søkes det:
 
 1. Tekst som er gate og husnummer søkes felt for felt i hele landet (`adressenavn`, `nummer`, `bokstav`), med inntil 1000 treff, og stedet kontrolleres i koden etterpå. Da må husnummeret være husnummeret. Det er ett kall for de aller fleste oppslag.
-2. Passer ingen, prøves fritekstsøk (teksten kan være delt feil, som «Gate 5 10» i Måløy, der gata heter «Gate 5») og et søk som tåler skrivefeil (`fuzzy=true`). Det siste brukes bare til forslag.
+2. Passer ingen, prøves samtidig fritekstsøk (teksten kan være delt feil, som «Gate 5 10» i Måløy, der gata heter «Gate 5»), et søk som tåler skrivefeil (`fuzzy=true`, med stammen av gatenavnet: «gronnegat» for «Gronnegaten»), og andre former av gatenavnet (`andreNavneformer`: vegen for veien, «karl johans gate» for «karl johansgate», «øvre vei» for «øvrevei», «kongensgate» for «kongens gate»). Forkortelsene skrives ut i disse søkene.
 3. Annen tekst (matrikkeladresser, og tekst uten husnummer) søkes som fritekst og som `adressetekst`, med inntil 100 treff hver.
+4. Fant trinn 2 en adresse som passer med en annen skrivemåte, hentes alle adressene med husnummeret i området, med `poststed` og `kommunenavn` (eller `postnummer`), side for side (`side`, høyst fem sider à 1000).
 
-Kjente begrensninger: en matrikkeladresse skrevet med sted i teksten («12/5 Voss») finnes bare når den er blant de hundre første treffene i fritekstsøket. Med `postnummer` og `kommunenummer` som parametre gjelder ikke det. En adresse som fantes over 1000 steder, ville gitt 400 selv med stedet i teksten. De vanligste som ble prøvd (Storgata 1, Ringveien 1, Kirkeveien 1) ga rundt 50 treff.
+Et oppslag med en annen skrivemåte bruker fem til elleve kall og tar 1–3,5 sekunder. «Kirkevegen 1, Oslo» ga ti kall på 3 sekunder, fordi Oslo har rundt 1260 adresser med husnummer 1 (to sider for poststedet og to for kommunen). Et nøyaktig skrevet oppslag bruker fortsatt ett kall.
 
-Dette er kontrollert mot det ekte registeret 2026-10-07. Kartverkets søk er romsligere enn det ser ut til, og derfor kontrolleres hvert treff i koden:
+Kjente begrensninger: en matrikkeladresse skrevet med sted i teksten («12/5 Voss») finnes bare når den er blant de hundre første treffene i fritekstsøket. Med `postnummer` og `kommunenummer` som parametre gjelder ikke det. En adresse som fantes over 1000 steder, ville gitt 400 selv med stedet i teksten. De vanligste som ble prøvd (Storgata 1, Ringveien 1, Kirkeveien 1) ga rundt 50 treff. En annen skrivemåte må først bli funnet av søkene i trinn 2. Aksenter og æ, ø og å skrevet uten i gatenavnet finnes bare når søket som tåler skrivefeil finner dem (to feil i lange ord: «ostensjoveien» gir Østensjøveien).
+
+Dette er kontrollert mot det ekte registeret 2026-10-07 og 2026-10-08. Kartverkets søk er romsligere enn det ser ut til, og derfor kontrolleres hvert treff i koden:
 
 - `sok` krever at alle ordene finnes, men i hvilket som helst felt. «storgata 1 elverum» gir også Storgata 12, der bruksnummeret er 1. «Storgata 619, Oslo» gir Storgata 1, som har bruksnummer 619.
-- `adressenavn` treffer andre former og lengre navn: «storgata» gir også Storgaten, Nedre Storgate og Gamle Storgate.
-- `kommunenavn` og `poststed` treffer når ett av ordene passer («oslo bergen moss» ga Storgata 1 i både Oslo og Moss). De brukes derfor ikke.
+- `adressenavn` treffer andre former og lengre navn: «storgata» gir også Storgaten, Nedre Storgate og Gamle Storgate, og «kirkevei» gir Kirkeveien og Gamle Kirkevei. Men «kirkeveg» gir ikke Kirkeveien, «storgt» gir ingenting, og «karl johansgate» gir ikke Karl Johans gate. «alle» er et stoppord: «bygdøy alle» gir også Bygdøy terrasse.
+- `sok` uten `fuzzy` finner ikke Tromso for Tromsø, Bygdoy alle for Bygdøy allé eller Kirkevegen for Kirkeveien. Med `fuzzy=true` gjør det, men det treffer også mye annet («sondre gate 1 trondheim» gir Nordre gate 1). Derfor godtas bare treff der navnet er det samme etter reglene over.
+- `fuzzy=true` kan ikke brukes med stjerne: registeret svarer HTTP 400 «Wildcard kan ikke brukes med fuzzysøk.» `sok` kan kombineres med `nummer` og `bokstav`.
+- `fuzzy=true` sammenligner ordene med stammene i registeret, men finner ikke stammen til ordet som er skrevet, og tåler to feil i lange ord: «gronnegaten 1 tromso» gir ingenting, «gronnegata 1 tromso» og «gronnegat 1 tromso» gir Grønnegata 1.
+- Bolignummer (H0201) står ikke i registeret. Med i `sok` gir det ingen treff, eller tilfeldige treff når det står alene.
+- `kommunenavn` og `poststed` treffer når ett av ordene passer («oslo bergen moss» ga Storgata 1 i både Oslo og Moss, og «nordre follo» gir også Nordre Land), og tåler ikke andre skrivemåter («vaaler» gir ingenting). De brukes bare i kontrollen av området, der treffene vurderes i koden. `kommunenavn=VÅLER` gir begge Våler-kommunene. De kan kombineres med `nummer` og `bokstav` uten `sok`, og `side` gir neste side (0 er den første).
 - `bokstav=` uten verdi gir bare adresser uten bokstav. `nummer` må være et heltall, ellers svarer registeret 400. Tomt `sok` gir også 400.
 - Rekkefølgen på treffene er ikke til å stole på. Eksakte treff står oftest først, men ikke alltid.
-- `treffPerSide` kan være høyst 1000. `totaltAntallTreff` stopper på 10 000. `filtrer` velger felt, også `adresser.representasjonspunkt`.
+- `treffPerSide` kan være høyst 1000. `totaltAntallTreff` stopper på 10 000. `filtrer` velger felt, også `adresser.representasjonspunkt`, `adresser.adressenavn` og `adresser.bokstav`.
 - «St.Croix gate» er ett ord i registeret. Bindestrek deler ord, komma uten mellomrom gjør det ikke («1,oslo» gir ingen treff).
 - Samme adressetekst kan finnes to ganger i én kommune: Storgata 1 i Vågan ligger både i 8300 Svolvær og 8310 Kabelvåg. Bare postnummeret skiller dem. «Storgata 1» finnes 44 steder i landet.
 
-**Demo-siden** (`frontend/index.html`): mens brukeren skriver, hentes forslag rett fra Kartverket (`sok` med stjerne på det siste ordet, 30 treff, åtte vises, de som teksten begynner med står først). Et valgt forslag slås opp med `adresse`, `postnummer` og `kommunenummer`. Trykker brukeren Enter eller «Hent data» uten å velge, avgjør API-et: én adresse gir data, og ellers vises kandidatene fra API-et som en liste å velge fra. Tekst uten tall er ikke en hel adresse. Da vises forslagslisten med beskjed om å velge, uten kall til API-et, så lenge registeret har forslag. Siden slår aldri opp en adresse brukeren verken har skrevet nøyaktig eller valgt. Svarer ikke Kartverket i nettleseren, virker siden fortsatt: det som er skrevet, sendes til API-et.
+**Demo-siden** (`frontend/index.html`): mens brukeren skriver, hentes forslag rett fra Kartverket (`sok` med stjerne på det siste ordet, 30 treff, åtte vises, de som teksten begynner med står først). Gir det ingen treff, og teksten har minst fire bokstaver, hentes forslag fra søket som tåler skrivefeil (uten stjerne), sortert etter hvor mange ord de har felles med teksten. Da står det «Ingen adresser er skrevet akkurat slik. Mente du en av disse?». Det prøves bare når det siste ordet er ferdig skrevet eller har minst fire tegn, fordi et påbegynt ord («Os») ellers gir treff over hele landet. Hvert søk har sin egen frist på fire sekunder. Svarer ikke registeret, står det at forslag ikke er tilgjengelig, og ingenting huskes. Bolignummer tas bort fra søket. Et valgt forslag slås opp med `adresse`, `postnummer` og `kommunenummer`. Trykker brukeren Enter eller «Hent data» uten å velge, avgjør API-et: én adresse gir data, og ellers vises kandidatene fra API-et som en liste å velge fra. Ble adressen funnet med en annen skrivemåte, får feltet adressen fra registeret, og adressekortet får en merknad. Kan teksten være flere adresser, står det «Adressen kan være flere adresser. Velg riktig adresse i listen.». Tekst uten tall er ikke en hel adresse. Da vises forslagslisten med beskjed om å velge, uten kall til API-et, så lenge registeret har forslag. Siden slår aldri opp en adresse brukeren verken har skrevet eller valgt. Svarer ikke Kartverket i nettleseren, virker siden fortsatt: det som er skrevet, sendes til API-et.
 
 Kunder som vil ha forslag i sitt eget søkefelt, kan kalle Kartverkets adresse-API på samme måte. `README.md` beskriver parametrene og svarene.
 
@@ -185,7 +211,7 @@ Alt under er testet 2026-10-03 med reelle kall mot tjenestene, med den samme kod
 
 | Kort | Status | Kilde og kommentar |
 |---|---|---|
-| Adresse / Matrikkel | Fungerer. Entydig oppslag fra 2026-10-07 | `ws.geonorge.no/adresser/v1/sok`. Se «Adresseoppslag» |
+| Adresse / Matrikkel | Fungerer. Entydig oppslag fra 2026-10-07, andre skrivemåter fra 2026-10-08 | `ws.geonorge.no/adresser/v1/sok`. Se «Adresseoppslag» |
 | Kart | Fungerer | OpenStreetMap-iframe |
 | Eiendomsteig | Fikset | `ws.geonorge.no/eiendom/v1/geokoding` med `omrade=true`. Slår opp teigene til adressens matrikkelnummer og regner areal fra teiggrensene. Det gamle WFS-oppslaget svarte 500 hos Kartverket, og tok dessuten «første teig i nærheten» |
 | Skredfare (NVE) | Fikset | `kart.nve.no/enterprise/rest/services`: `Skredfaresoner3`, `SkredKvikkleire2`, `SnoskredAktsomhet`, `SkredSteinAktR`, `JordFlomskredAktsomhet`, `KvikkleireskredAktsomhet`. Den gamle adressen (`KastWMTS`) var en stoppet tjeneste, og feilen ble vist som grønt |
@@ -204,15 +230,30 @@ Alt under er testet 2026-10-03 med reelle kall mot tjenestene, med den samme kod
 - Ingen treff: Storgata 1, Oslo (teig 208/619, 790 m², fyllmasse, leirskifer)
 - Reguleringsplan: Torvet i Trondheim (63.4305, 10.3951) gir Midtbyplanen
 
+De fire adressene over (Nordgardsleitet 82, Nedre Rælingsveg 148, Depotgata 9 og Storgata 1 i Oslo) ga de samme svarene gjennom det deployede API-et 2026-10-07, etter adressevalget.
+
 Adresseoppslag, kontrollert mot det ekte registeret 2026-10-07 med koden i `src/`:
 
 - `Storgata 1` gir 400 med 44 treff. `Storgata 1, Oslo` gir 0155 OSLO.
 - `Storgata 1, Vågan` gir 400 med to kandidater (8300 SVOLVÆR og 8310 KABELVÅG). Med `postnummer=8310` gir den Kabelvåg.
-- `Storgata 12B, Oslo`, `Storgaten 1, Oslo` og `Markveien 1, Oslo` gir 404 med kandidater (Storgata 12, Storgata 1, Markveien 1A–1C).
+- `Storgata 12B, Oslo` og `Markveien 1, Oslo` gir 404 med kandidater (Storgata 12, Markveien 1A–1C).
 - `Storgata 619, Oslo` gir 404 uten kandidater. 619 er bruksnummeret til Storgata 1.
 - `Storgata 8A, Kragerø` gir `Torvet, Storgata 8A`. `Flaga, 12/5` gir matrikkeladressen på Voss, og `12/5` alene gir 400.
 - `Tamburbakken 17 I, Drøbak` gir 17I. `Storgata 1 i Oslo` gir Storgata 1.
 - `Pir I 2, Trondheim` og `Gate 5 10, Måløy` gir treff, selv om navnet inneholder «I» og et tall.
+
+Andre skrivemåter, kontrollert mot det ekte registeret 2026-10-08 (143 tilfeller i alt, alle som ventet, også etter kontrollen av området):
+
+- `Storgaten 1, Oslo`, `Storgt. 1, Oslo` og `Storgt 1, Oslo` gir Storgata 1, 0155 OSLO med `eksaktTreff: false`.
+- `Kirkevegen 1, Oslo`, `Kirkevei 1, Oslo`, `Kirkevn. 1, Oslo` og `Kirkev. 1, Oslo` gir Kirkeveien 1, 0266 OSLO. `Kirkeveien 1, Lodingen` gir Kirkevegen 1, 8410 LØDINGEN.
+- `Karl Johansgate 1, Oslo` og `Karl Johans gt. 1, Oslo` gir Karl Johans gate 1. `Thorvald Meyersgate 1, Oslo` gir Thorvald Meyers gate 1. `Kongens gate 1, Åndalsnes` gir Kongensgate 1, og `Kongensgate 1, Oslo` gir Kongens gate 1.
+- `Bygdoy alle 5, Oslo` gir Bygdøy allé 5. `Storgata 1, Tromso`, `Tromsoe`, `Kabelvag` og `Aalesund` gir Storgata 1 der. `Mollergata 2A, Oslo` gir Møllergata 2A.
+- `Storgata 1 H0201, 0155 Oslo` gir Storgata 1 med `eksaktTreff: true`.
+- `Storgate 10, Drammen` og `Storgata 10, Drammen` gir 400 med Storgaten 10 (Svelvik), Øvre Storgate 10 og Nedre Storgate 10. `Storgata 1, Vagan` gir 400 med Svolvær og Kabelvåg. `Storgaten 10, Drammen` gir Storgaten 10 i Svelvik med `eksaktTreff: true`.
+- `Kirkeveien 1, Kristiansand` gir 404 med Oddernes kirkevei 1 og Greipstad gamle kirkeveg 1. `Stogata 1, Oslo` gir 404 med Storgata 1 som forslag. `Tollbugt. 1, Oslo` gir 404, fordi bare 1A og 1B finnes.
+- Uten sted: `Bygdøy Alle 5` gir 404 med Bygdøy allé 5 som forslag. `Storgaten 1` med `kommunenummer=1865` gir 400 «Adressen kan være flere adresser» med Svolvær og Kabelvåg.
+
+Gjennom det deployede API-et ble disse kontrollert samme dag, med samme svar: `Storgata 1`, `Storgata 1, Vågan` (også med `postnummer=8310`), `Storgata 1, Oslo`, `Storgaten 1, Oslo`, `Storgata 619, Oslo` og `Flaga, 12/5` med postnummer og kommunenummer.
 
 ## Åpne punkter, i prioritert rekkefølge
 
@@ -245,7 +286,7 @@ De nasjonale plandataene er merket «Norge digitalt begrenset» med Norge digita
 - Netlify: la demo-siden bare deployes når `frontend/` er endret (Base directory eller en ignore-regel). Da koster en push som bare gjelder API-et ingen kreditter.
 - En betalt Railway-plan (Hobby, fra $5 per måned) gir regionbytte til EU West (Amsterdam), eget domene og mulighet til å la tjenesten stå på hele tiden. Brukerne og datakildene er i Norge, og hvert oppslag går nå via California.
 - `?api_key=` oppgitt to ganger gir 500 i stedet for 401 (`src/middleware/apiNokkel.js` sender en tabell til databasen). Serveren stopper ikke av det.
-- Adresseoppslaget godtar ikke andre former av gatenavnet («Storgaten» for «Storgata», «Kirkevegen» for «Kirkeveien»), men foreslår dem. Vil kundene heller ha treff, kan former som bare skiller seg på -gata/-gaten og -veien/-vegen godtas når nøyaktig én adresse passer. Det er et valg brukeren må ta: det er trygt i de fleste tilfeller, men «Storgate 10, Drammen» viser at det kan bli feil (Øvre Storgate, Nedre Storgate og Storgaten i Svelvik ligger alle i Drammen kommune).
+- Adresseoppslaget kan godta flere skrivemåter: andre endelser (Bakke og Bakken, Plass og Plassen, Allé og Alléen), registerets egne forkortelser («Gml. Kirkevei» for «Gamle Kirkevei»), «St.» for «Sankt», og «N-0155» som postnummer. De er ikke tatt med, fordi det er usikkert hvor ofte de brukes, og fordi gårdsnavn som Bakke og Bakken kan være forskjellige steder.
 
 ## Metode for å fikse en datakilde
 
@@ -281,9 +322,11 @@ Dette er metoden som løste alle kortene.
 - Testene i `test/api.test.js` sender `X-Forwarded-For` med en egen adresse per test. Uten det går de til sammen over grensen på 60 kall i minuttet per IP, og får 429.
 - Adressetekst må sammenlignes etter `normalize('NFC')`. En «å» kan komme som a + ring (to tegn), blant annet fra Mac.
 - Et regulært uttrykk som `/\.+$/` bruker kvadratisk tid på lange rekker av punktum. `ord()` i `adresse.js` fjerner derfor punktum med en løkke, og `adresse` er begrenset til 200 tegn.
+- Kartverkets søk som tåler skrivefeil (`fuzzy=true`) gir HTTP 400 med stjerne i søket. Demo-siden fjerner stjernen før det søket.
 - Fra AI-øktens sky-miljø 2026-10-07 nådde `curl` alle kildene, mens `fetch` i Node ble avvist av nettverksfilteret. Reelle kall med koden i `src/` ble derfor kjørt med `fetch` byttet ut med et kall til `curl`.
 - Skjermbilder og klikk i brukerens Chrome feiler når Chrome-vinduet er skjult eller minimert. Les da siden med JavaScript i stedet.
-- Når en AI-økt skal styre GitHub Desktop, må både «GitHub Desktop» og prosessen `githubdesktop.exe` godkjennes. Vinduet eies av den siste.
+- Når en AI-økt skal styre GitHub Desktop, må både «GitHub Desktop» og prosessen `githubdesktop.exe` godkjennes. Vinduet eies av den siste. Et annet vindu kan legge seg foran mens pushen går. Pushen kan kontrolleres uten skjermbilde: etterpå skal `.git/refs/heads/main` og `.git/refs/remotes/origin/main` inneholde samme hash.
+- Mens Railway bytter fra gammel til ny deploy, kan et kall gi 502 «Application failed to respond». Sett én gang 2026-10-07. Neste kall et halvt minutt senere svarte fra den nye versjonen.
 
 ## Videre plan
 

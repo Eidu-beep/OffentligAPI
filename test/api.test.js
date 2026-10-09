@@ -26,6 +26,13 @@ function kildeSvar(url) {
   const sti = url.pathname;
   if (url.hostname === 'ws.geonorge.no' && sti === '/adresser/v1/sok') {
     if (nede.has('adresser')) return null;   // adresseregisteret svarer ikke
+    if (nede.has('uklart') && url.searchParams.get('fuzzy') === 'true') return null;   // bare søket som tåler skrivefeil
+    // Kontrollen av området (søk side for side) svarer ikke, eller sier at det finnes svært mange adresser
+    if (nede.has('omraade') && url.searchParams.has('side')) return null;
+    if (nede.has('mange') && url.searchParams.has('side')) {
+      const svar = sokIRegister(url.searchParams);
+      return { ...svar, metadata: { ...svar.metadata, totaltAntallTreff: 999999 } };
+    }
     return sokIRegister(url.searchParams);
   }
   if (url.hostname === 'ws.geonorge.no' && sti.startsWith('/eiendom/v1/')) return svar.TEIG;
@@ -162,17 +169,24 @@ test('samme adresse to steder i én kommune: postnummeret skiller dem', async ()
   assert.equal((await eiendom('Storgata 1, 8300 Svolvær', { postnummer: '8310' })).status, 404);
 });
 
+// Slår opp en adresse som skal gi 404, og gir kandidatene
+async function forslag(adresse, filter = {}) {
+  const r = await eiendom(adresse, filter);
+  assert.equal(r.status, 404, adresse);
+  const d = await r.json();
+  assert.equal(d.feil, 'Ingen adressetreff');
+  return steder(d.kandidater ?? []);
+}
+
+// Slår opp en adresse som skal gi 200, og gir adressen, postnummeret og om treffet var eksakt
+async function treff(adresse, filter = {}) {
+  const r = await eiendom(adresse, filter);
+  const d = await r.json();
+  assert.equal(r.status, 200, `${adresse}: ${JSON.stringify(d).slice(0, 300)}`);
+  return [d.meta.adresse, d.meta.postnummer, d.meta.eksaktTreff];
+}
+
 test('API-et gjetter ikke: en adresse som bare ligner, gir 404 med forslag', async () => {
-  const forslag = async adresse => {
-    const r = await eiendom(adresse);
-    assert.equal(r.status, 404, adresse);
-    const d = await r.json();
-    assert.equal(d.feil, 'Ingen adressetreff');
-    return steder(d.kandidater ?? []);
-  };
-  // Registeret gir treff på andre former av navnet og på lengre navn. Ingen av dem er adressen det ble spurt om.
-  assert.deepEqual(await forslag('Storgaten 1, Oslo'), ['Storgata 1, 0155 OSLO']);
-  assert.deepEqual(await forslag('Storgate 10, Drammen'), ['Øvre Storgate 10, 3018 DRAMMEN', 'Nedre Storgate 10, 3015 DRAMMEN', 'Storgaten 10, 3060 SVELVIK']);
   // Husnummeret finnes bare med bokstav
   assert.deepEqual(await forslag('Markveien 1, Oslo'), ['Markveien 1A, 0554 OSLO', 'Markveien 1B, 0554 OSLO']);
   // Skrivefeil: forslagene kommer fra et søk som tåler skrivefeil
@@ -180,6 +194,122 @@ test('API-et gjetter ikke: en adresse som bare ligner, gir 404 med forslag', asy
   assert.deepEqual(await forslag('Storgata 1, Elverun'), ['Storgata 1, 2408 ELVERUM']);
   // Ingenting som ligner
   assert.deepEqual(await forslag('Finnesikke 99, Ingensteds'), []);
+});
+
+test('annen skrivemåte av samme adresse gir treff når bare én adresse passer', async () => {
+  // Endelsen i gatenavnet
+  // (Storgata 1 i Oslo slås ikke opp her. Den skal ikke ligge i cachen når testen av et fullt oppslag kjører.)
+  assert.deepEqual(await treff('Storgaten 15, Oslo'), ['Storgata 15', '0155', false]);
+  assert.deepEqual(await treff('Kirkevegen 1, Oslo'), ['Kirkeveien 1', '0266', false]);
+  assert.deepEqual(await treff('Kirkeveien 1, Lødingen'), ['Kirkevegen 1', '8410', false]);
+  // Forkortelser, også uten mellomrom foran husnummeret og som eget ord
+  assert.deepEqual(await treff('Storgt. 11, Oslo'), ['Storgata 11', '0155', false]);
+  assert.deepEqual(await treff('Storgt.17, Oslo'), ['Storgata 17', '0155', false]);
+  assert.deepEqual(await treff('Kirkevn. 1, 0266'), ['Kirkeveien 1', '0266', false]);
+  assert.deepEqual(await treff('Kirke vn. 1, Oslo'), ['Kirkeveien 1', '0266', false]);
+  assert.deepEqual(await treff('Karl Johans gt 1, 0154'), ['Karl Johans gate 1', '0154', false]);
+  // Forkortelser gjelder bare gatenavnet: «Hov.» er stedet Hov, ikke «Hovei»
+  assert.deepEqual(await treff('Kirkevegen 3, Hov.'), ['Kirkeveien 3', '2860', false]);
+  // Navnet i ett eller to ord
+  assert.deepEqual(await treff('Karl Johansgate 1, Oslo'), ['Karl Johans gate 1', '0154', false]);
+  assert.deepEqual(await treff('Kongens gate 1, Åndalsnes'), ['Kongensgate 1', '6300', false]);
+  // Aksenter, og æ, ø og å skrevet uten
+  assert.deepEqual(await treff('Bygdoy alle 5, Oslo'), ['Bygdøy allé 5', '0257', false]);
+  assert.deepEqual(await treff('Gronnegata 1, Tromso'), ['Grønnegata 1', '9008', false]);
+  assert.deepEqual(await treff('Grønnegata 1, Tromsoe'), ['Grønnegata 1', '9008', false]);
+  assert.deepEqual(await treff('Storgata 1, Kabelvag'), ['Storgata 1', '8310', false]);
+  assert.deepEqual(await treff('Kongensgate 1, Aandalsnes'), ['Kongensgate 1', '6300', false]);
+  // Tilleggsnavnet kan stå først
+  assert.deepEqual(await treff('Torvet, Storgaten 8A, Kragerø'), ['Torvet, Storgata 8A', '3770', false]);
+  // Med postnummer som parameter
+  assert.deepEqual(await treff('Storgaten 12', { postnummer: '0155' }), ['Storgata 12', '0155', false]);
+  // Langveien 3 finnes 1100 steder, men i Bygd5 bare én gang. Kontrollen av området viser det.
+  assert.deepEqual(await treff('Langvegen 3, Bygd5'), ['Langveien 3', '1005', false]);
+  // Skrevet nøyaktig slik registeret har den: eksaktTreff er true
+  assert.deepEqual(await treff('Storgata 13, Oslo'), ['Storgata 13', '0155', true]);
+  // Finnes adressen slik den er skrevet, er det den, selv om en annen skrivemåte også finnes (Svelvik er i Drammen)
+  assert.deepEqual(await treff('Storgaten 10, Drammen'), ['Storgaten 10', '3060', true]);
+});
+
+test('annen skrivemåte som kan være flere adresser, gir 400 med kandidatene', async () => {
+  const kandidater = async adresse => {
+    const r = await eiendom(adresse);
+    assert.equal(r.status, 400, adresse);
+    const d = await r.json();
+    assert.equal(d.feil, 'Adressen kan være flere adresser');
+    assert.match(d.hjelp, /Velg en av kandidatene/);
+    return d;
+  };
+  // Storgaten 10 i Svelvik er samme navn med en annen endelse. Øvre og Nedre Storgate har flere ord i navnet,
+  // men kan være det som er ment.
+  let d = await kandidater('Storgate 10, Drammen');
+  assert.deepEqual(steder(d.kandidater), ['Storgaten 10, 3060 SVELVIK', 'Øvre Storgate 10, 3018 DRAMMEN', 'Nedre Storgate 10, 3015 DRAMMEN']);
+  assert.equal(d.antall, 3);
+  d = await kandidater('Storgata 1, Vagan');
+  assert.deepEqual(steder(d.kandidater), ['Storgata 1, 8300 SVOLVÆR', 'Storgata 1, 8310 KABELVÅG']);
+  d = await kandidater('Kirkevegen 5, Oslo');
+  assert.deepEqual(steder(d.kandidater), ['Kirkeveien 5, 0266 OSLO', 'Gamle Kirkevei 5, 0377 OSLO']);
+  // Samme navn i ett og to ord, i samme by
+  d = await kandidater('Nygata 3, Bergen');
+  assert.deepEqual(steder(d.kandidater).sort(), ['Ny gate 3, 5015 BERGEN', 'Nygaten 3, 5015 BERGEN']);
+  // Søkene på navnet finner bare Øvreveien 8E. Kontrollen av området finner også Øvre vei 8E.
+  kall.length = 0;
+  d = await kandidater('Ovrevegen 8E, Langhus');
+  assert.deepEqual(steder(d.kandidater).sort(), ['Øvre vei 8E, 1405 LANGHUS', 'Øvreveien 8E, 1405 LANGHUS']);
+  assert.ok(adressesok().some(q => q.poststed === 'LANGHUS' && q.nummer === '8' && q.bokstav === 'E'), 'området er kontrollert');
+  // Uten sted: alle Storgata 1, og antallet er ukjent (hele landet kontrolleres ikke)
+  d = await kandidater('Storgaten 1');
+  assert.equal(d.kandidater.length, 6);
+  assert.equal('antall' in d, false);
+});
+
+test('annen skrivemåte blir bare forslag når det ikke er sikkert', async () => {
+  // Bare navn med flere ord passer: Kirkeveien 1 finnes ikke i Kristiansand
+  assert.deepEqual(await forslag('Kirkeveien 1, Kristiansand'), ['Oddernes kirkevei 1, 4630 KRISTIANSAND S', 'Greipstad gamle kirkeveg 1, 4645 NODELAND']);
+  // «Gate» alene er ikke et navn. Karl Johans gate 1 er et forslag, men gjør ikke «Gate 1, Oslo» til en adresse
+  assert.deepEqual(await forslag('Gate 1, Oslo'), ['Karl Johans gate 1, 0154 OSLO']);
+  // Uten sted kan det finnes en adresse med samme navn et annet sted i landet
+  assert.deepEqual(await forslag('Bygdoy alle 5'), ['Bygdøy allé 5, 0257 OSLO']);
+  assert.deepEqual(await forslag('Karl Johans gt 1'), ['Karl Johans gate 1, 0154 OSLO']);
+  // Kontrollen av området svarer ikke, eller det finnes for mange adresser med husnummeret der
+  for (const grunn of ['omraade', 'mange']) {
+    nede.add(grunn);
+    try {
+      assert.deepEqual((await forslag(`Storgaten ${grunn === 'omraade' ? 14 : 18}, Oslo`))[0], `Storgata ${grunn === 'omraade' ? 14 : 18}, 0155 OSLO`);
+    } finally { nede.clear(); }
+  }
+  // Søket som tåler skrivefeil, svarer ikke: det gjør ingenting, for kontrollen av området avgjør
+  nede.add('uklart');
+  try {
+    assert.deepEqual(await treff('Storgaten 19, Oslo'), ['Storgata 19', '0155', false]);
+  } finally { nede.clear(); }
+  // Skrivefeil i navnet er alltid bare forslag
+  assert.equal((await forslag('Stogata 1, Kabelvåg'))[0], 'Storgata 1, 8310 KABELVÅG');
+  // Æ, ø og å som er skrevet, må stå i registeret også: Åsveien er ikke Asveien
+  assert.deepEqual(await forslag('Åsveien 2, Ski'), ['Asveien 2, 1400 SKI']);
+  assert.deepEqual(await treff('Asveien 2, Ski'), ['Asveien 2', '1400', true]);
+  // «Strandv.» kan være Strandveien og Strandvika: alle navn som begynner slik, teller
+  const strand = await eiendom('Strandv. 1, Oslo');
+  assert.equal(strand.status, 400);
+  assert.deepEqual(steder((await strand.json()).kandidater).sort(), ['Strandveien 1, 0250 OSLO', 'Strandvika 1, 0250 OSLO']);
+  assert.deepEqual(await treff('Strandvn. 1, Oslo'), ['Strandveien 1', '0250', false]);   // vn. er bare vei
+  // Med punktum er «Kirkev.» en forkortelse, uten er det ikke. Cachen skiller dem.
+  assert.equal((await eiendom('Kirkev 1, Oslo')).status, 404);
+  assert.deepEqual(await treff('Kirkev. 1, Oslo'), ['Kirkeveien 1', '0266', false]);
+  assert.equal((await eiendom('Kirkev 1, Oslo')).status, 404);
+});
+
+test('bolignummer tas bort', async () => {
+  kall.length = 0;
+  assert.deepEqual(await treff('Storgata 9 H0201, 0155 Oslo'), ['Storgata 9', '0155', true]);
+  assert.deepEqual(adressesok(), [{ adressenavn: 'storgata', nummer: '9', bokstav: '' }]);
+  // En annen leilighet i samme bygning er samme adresse, og hentes fra cachen
+  for (const adresse of ['Storgata 9, U0101, 0155 Oslo', 'Storgata 9 (H0201), 0155 Oslo', 'Storgata 9, 0155 Oslo, H0201.']) {
+    const r = await eiendom(adresse);
+    assert.equal((await r.json()).meta.cachet, true, adresse);
+  }
+  // Med mellomrom er det husbokstav og postnummer: Storgata 1 H, 0155 finnes ikke
+  assert.equal((await eiendom('Storgata 1 H 0155 Oslo')).status, 404);
 });
 
 test('husnummeret må være husnummeret, ikke et annet tall i adressen', async () => {

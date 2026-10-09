@@ -2,16 +2,26 @@
 // reelle kall 2026-10-07 (ws.geonorge.no/adresser/v1/sok):
 // - sok: alle ordene må finnes i adressen, men i hvilket som helst felt. «storgata 1 elverum» treffer
 //   derfor også Storgata 12 når bruksnummeret er 1, og «markveien 1» treffer Markveien 1A.
-//   Med fuzzy=true godtas én skrivefeil per ord. En stjerne sist i et ord betyr «begynner med».
-//   Et tomt søk gir HTTP 400 i det ekte API-et. Her kastes en feil, så testene ser det.
+//   Med fuzzy=true godtas skrivefeil: én i ord på tre til fem tegn, to i lengre ord. Ordet som er skrevet,
+//   sammenlignes med ordene i registeret og stammene deres, men stammen til det som er skrevet finnes ikke:
+//   «gronnegaten» er tre feil unna «grønnegat», «gronnegat» bare én. En stjerne sist i et ord betyr «begynner med».
+//   Et tomt søk, og stjerne sammen med fuzzy=true, gir HTTP 400 i det ekte API-et. Her kastes en feil,
+//   så testene ser det.
+//   Stedsnavn med æ, ø og å skrevet uten (Tromso, Kabelvag) finnes bare med fuzzy=true. Det samme gjør
+//   Kirkevegen for Kirkeveien (kontrollert 2026-10-08).
 //   Rekkefølgen på treffene er ikke til å stole på, så de løse treffene står før de eksakte her.
-// - adressenavn: treffer også andre former og lengre navn (storgata gir Storgaten og Nedre Storgate).
+// - adressenavn: treffer også andre former og lengre navn (storgata gir Storgaten og Nedre Storgate),
+//   men ikke vegen for veien, og ikke «Karl Johansgate» for «Karl Johans gate».
 // - adressetekst: ordene må stå etter hverandre i adresseteksten.
 // - bokstav uten verdi gir bare adresser uten bokstav. postnummer og kommunenummer må være like.
+// - poststed og kommunenavn: ett av ordene må være et ord i navnet («nordre follo» gir også Nordre Land).
+// - side gir neste side med treff (0 er den første).
 // - totaltAntallTreff forteller hvor mange som finnes, også når treffPerSide gir færre.
 // - filtrer velger hvilke felt som kommer med i svaret.
-// Storgata 1 i Oslo, Svolvær, Kabelvåg og Elverum, Øvre Storgate 10, Torvet i Kragerø og Flaga på Voss
-// finnes slik i registeret. Resten er laget for testene, og koordinatene er ikke de ekte.
+// Storgata 1 i Oslo, Svolvær, Kabelvåg og Elverum, Øvre Storgate 10, Torvet i Kragerø, Flaga på Voss, Kirkeveien 1
+// og 5 i Oslo, Kirkevegen 1 i Lødingen, Karl Johans gate 1, Kongensgate 1 i Åndalsnes, Bygdøy allé 5, Grønnegata 1
+// i Tromsø og de to kirkeveiene i Kristiansand finnes slik i registeret. Resten er laget for testene, og
+// koordinatene er ikke de ekte.
 
 import { ADRESSE } from './svar.js';
 
@@ -84,6 +94,32 @@ export const ADRESSER = [
   // så etter dem ville den ikke blitt funnet.
   matrikkeladresse(null, 9, 9, '6998', 'STORBY', '4998', 'STORBY'),
   ...Array.from({ length: 1100 }, (_, i) => adresse('Sletta', 1 + i, '', '6998', 'STORBY', '4998', 'STORBY', 9, 9)),
+  // Andre skrivemåter: vei og veg, navn i ett eller to ord, aksenter, og æ, ø og å
+  adresse('Kirkeveien', 1, '', '0266', 'OSLO', '0301', 'OSLO', 212, 517),
+  adresse('Kirkeveien', 1, 'B', '0266', 'OSLO', '0301', 'OSLO', 212, 518),
+  adresse('Kirkevegen', 1, '', '8410', 'LØDINGEN', '1851', 'LØDINGEN', 28, 389),
+  adresse('Karl Johans gate', 1, '', '0154', 'OSLO', '0301', 'OSLO', 207, 80),
+  adresse('Kongensgate', 1, '', '6300', 'ÅNDALSNES', '1539', 'RAUMA', 105, 61),
+  adresse('Bygdøy allé', 5, '', '0257', 'OSLO', '0301', 'OSLO', 211, 17),
+  adresse('Grønnegata', 1, '', '9008', 'TROMSØ', '5501', 'TROMSØ', 200, 1466),
+  // Lengre navn. I Kristiansand finnes ingen Kirkeveien 1, bare to kirkeveier med flere ord i navnet.
+  // Gamle Kirkevei 5 i Oslo er laget for testene: der kan «Kirkevegen 5, Oslo» være to adresser.
+  adresse('Oddernes kirkevei', 1, '', '4630', 'KRISTIANSAND S', '4204', 'KRISTIANSAND', 152, 2),
+  adresse('Greipstad gamle kirkeveg', 1, '', '4645', 'NODELAND', '4204', 'KRISTIANSAND', 37, 4),
+  adresse('Kirkeveien', 5, '', '0266', 'OSLO', '0301', 'OSLO', 212, 521),
+  adresse('Gamle Kirkevei', 5, '', '0377', 'OSLO', '0301', 'OSLO', 40, 2),
+  // Samme navn i ett og to ord i samme by, laget for testene. Søkene på navnet finner ikke Øvre vei 8E for
+  // «Ovrevegen 8E»; det gjør bare kontrollen av alle adresser med husnummeret i området.
+  adresse('Nygaten', 3, '', '5015', 'BERGEN', '4601', 'BERGEN', 165, 30),
+  adresse('Ny gate', 3, '', '5015', 'BERGEN', '4601', 'BERGEN', 165, 31),
+  adresse('Øvreveien', 8, 'E', '1405', 'LANGHUS', '3207', 'NORDRE FOLLO', 99, 1),
+  adresse('Øvre vei', 8, 'E', '1405', 'LANGHUS', '3207', 'NORDRE FOLLO', 99, 2),
+  // Forkortelse foran et sted med punktum etter, og et navn uten å der det finnes et med å
+  adresse('Kirkeveien', 3, '', '2860', 'HOV', '3449', 'SØNDRE LAND', 60, 3),
+  adresse('Asveien', 2, '', '1400', 'SKI', '3207', 'NORDRE FOLLO', 134, 9),
+  // «Strandv.» kan være begge disse (laget for testene)
+  adresse('Strandveien', 1, '', '0250', 'OSLO', '0301', 'OSLO', 209, 1),
+  adresse('Strandvika', 1, '', '0250', 'OSLO', '0301', 'OSLO', 209, 2),
 ];
 
 // Ordene i en tekst, slik søket ser dem
@@ -105,10 +141,13 @@ function avstand(a, b) {   // Levenshtein
   return rad[b.length];
 }
 
+// Hvor mange skrivefeil søket som tåler skrivefeil godtar i et ord
+const feilGodtatt = o => (o.length <= 2 ? 0 : o.length <= 5 ? 1 : 2);
+
 function likeOrd(a, b, uklart) {
   if (a.endsWith('*')) return b.startsWith(a.slice(0, -1));
   if (stamme(a) === stamme(b)) return true;
-  return uklart && a.length >= 4 && !/\d/.test(a) && avstand(stamme(a), stamme(b)) <= 1;
+  return uklart && !/\d/.test(a) && Math.min(avstand(a, b), avstand(a, stamme(b))) <= feilGodtatt(a);
 }
 
 // Sant når ordene i frasen står etter hverandre i teksten
@@ -118,7 +157,10 @@ function inneholderFrase(tekst, frase) {
   return f.length > 0 && t.some((_, start) => f.every((o, i) => t[start + i] !== undefined && likeOrd(o, t[start + i], false)));
 }
 
-const KJENTE_PARAMETRE = ['treffPerSide', 'sok', 'fuzzy', 'adressenavn', 'nummer', 'bokstav', 'adressetekst', 'postnummer', 'kommunenummer', 'filtrer'];
+const KJENTE_PARAMETRE = ['treffPerSide', 'side', 'sok', 'fuzzy', 'adressenavn', 'nummer', 'bokstav', 'adressetekst', 'postnummer',
+  'kommunenummer', 'poststed', 'kommunenavn', 'filtrer'];
+// Ett av ordene i søket er et ord i navnet
+const etOrdI = (navn, sok) => ordene(sok).some(o => ordene(navn).includes(o));
 
 // Svarer på et søk slik adresse-API-et gjør. q er URLSearchParams fra forespørselen.
 export function sokIRegister(q) {
@@ -129,6 +171,7 @@ export function sokIRegister(q) {
   // «12/5» søkes som 12 og 5, slik at også gårds- og bruksnummer treffer
   const sokeord = q.has('sok') ? q.get('sok').toLowerCase().split(/[\s/]+/).filter(Boolean) : null;
   if (sokeord && !sokeord.length) throw new Error('Testregisteret: tomt søk. Det ekte API-et svarer HTTP 400');
+  if (uklart && sokeord?.some(o => o.includes('*'))) throw new Error('Testregisteret: stjerne med fuzzy=true. Det ekte API-et svarer HTTP 400');
 
   const treff = ADRESSER.filter(a => {
     if (q.has('postnummer') && a.postnummer !== q.get('postnummer')) return false;
@@ -137,6 +180,8 @@ export function sokIRegister(q) {
     if (q.has('bokstav') && (a.bokstav ?? '').toLowerCase() !== q.get('bokstav').toLowerCase()) return false;
     if (q.has('adressenavn') && !inneholderFrase(a.adressenavn, q.get('adressenavn'))) return false;
     if (q.has('adressetekst') && !inneholderFrase(a.adressetekst, q.get('adressetekst'))) return false;
+    if (q.has('poststed') && !etOrdI(a.poststed, q.get('poststed'))) return false;
+    if (q.has('kommunenavn') && !etOrdI(a.kommunenavn, q.get('kommunenavn'))) return false;
     if (sokeord) {
       const felt = [...ordene(a.adressetekst).flatMap(o => o.split('/')), String(a.nummer), a.postnummer,
         ...ordene(a.poststed), ...ordene(a.kommunenavn), String(a.gardsnummer), String(a.bruksnummer)];
@@ -146,9 +191,10 @@ export function sokIRegister(q) {
   });
 
   const antall = Number(q.get('treffPerSide') ?? 10);
+  const side = Number(q.get('side') ?? 0);
   const svar = {
-    metadata: { treffPerSide: antall, side: 0, totaltAntallTreff: treff.length, viserFra: 0, viserTil: antall, asciiKompatibel: true },
-    adresser: structuredClone(treff.slice(0, antall)),
+    metadata: { treffPerSide: antall, side, totaltAntallTreff: treff.length, viserFra: side * antall, viserTil: (side + 1) * antall, asciiKompatibel: true },
+    adresser: structuredClone(treff.slice(side * antall, (side + 1) * antall)),
   };
   if (!q.has('filtrer')) return svar;
 
